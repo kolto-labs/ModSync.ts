@@ -1,0 +1,60 @@
+{
+  "lane": "source-guide-corpus-audit",
+  "repository": "kolto-labs/mod-builds",
+  "commit": "21b2f0499d28ecd4ee2092701dee5792ba5da4b9",
+  "statement": "Parsing and heuristic generation coverage only. Neither guide was installed. Generated instructions are not verified against original mod archives or game files.",
+  "guides": [
+    {
+      "game": "KOTOR1",
+      "source": "content/k1/full.md",
+      "sha256": "8f4e7b164954b203d872cb7e92e06d153abe84195f683ae36d428b5b99cd75a2",
+      "modCount": 197,
+      "explicitInstructionCount": 0,
+      "generatedInstructionCount": 394,
+      "actions": {
+        "Extract": 197,
+        "Move": 115,
+        "Patcher": 81,
+        "Execute": 1
+      },
+      "gaps": {
+        "noInstructions": 0,
+        "heuristicRequiresAuthorReview": 197
+      },
+      "warnings": {
+        "count": 199,
+        "details": "Retained in runner artifacts"
+      },
+      "inventory": {
+        "count": 197,
+        "details": "Retained in runner artifacts"
+      }
+    },
+    {
+      "game": "KOTOR2",
+      "source": "content/k2/full.md",
+      "sha256": "f442bdf574031623ed577609730d887069b9bc8e38e8e2f38ecc43a7e7487d5f",
+      "modCount": 154,
+      "explicitInstructionCount": 0,
+      "generatedInstructionCount": 308,
+      "actions": {
+        "Extract": 154,
+        "Execute": 3,
+        "Move": 91,
+        "Patcher": 60
+      },
+      "gaps": {
+        "noInstructions": 0,
+        "heuristicRequiresAuthorReview": 154
+      },
+      "warnings": {
+        "count": 157,
+        "details": "Retained in runner artifacts"
+      },
+      "inventory": {
+        "count": 154,
+        "details": "Retained in runner artifacts"
+      }
+    }
+  ]
+}

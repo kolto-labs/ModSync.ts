@@ -15,7 +15,11 @@ These workflows run only on manual dispatch. Each CLI job covers both game
 targets by default. Each GUI job launches the actual Electron application and
 clicks its renderer against the authenticated in-process server. Screenshots,
 traces, command logs, component receipts, source/runtime identities, hashes and
-rollback evidence are uploaded even when a later step fails.
+rollback evidence are uploaded even when a later step fails on hosted runners.
+Linux workflows also accept `runner=session` for an already provisioned ephemeral
+self-hosted runner with the `modsync-session` label. This lane retains the same
+strict assertions and saves evidence in the runner workspace; its upload step is
+skipped because this session cannot reach GitHub artifact storage.
 
 The tools keep three proof lanes separate:
 
@@ -55,3 +59,17 @@ concurrency, native TLK codecs, path containment, editor/wizard state and deskto
 shutdown. Large-guide native click-throughs exposed and fixed renderer update
 loops that the small fixture did not exercise. Aggregate checks remain required
 before rerunning the platform workflows after source changes.
+
+## Runner results from 2026-10-14
+
+The Linux CLI workflow passed on an ephemeral GitHub Actions runner:
+[run 38509235033](https://github.com/bodencrouch/ModSync.ts/actions/runs/38509235033).
+Its source-mapped lane verified 197 K1 components and 154 TSL components, with
+394 and 308 instructions respectively, zero-write dry runs and exact baseline
+restoration. Curated receipts are in [runner-evidence/2026-10-14](runner-evidence/2026-10-14).
+The complete output remains in the session runner workspace.
+
+Hosted jobs were dispatched for all platforms, but GitHub rejected allocation
+because account payments failed or the spending limit needs increasing. Windows
+and macOS execution remains unverified until hosted runners can start. The
+workflows and upload steps remain ready for those platforms.
