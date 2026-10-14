@@ -3,6 +3,11 @@ name: Synthetic CLI (linux)
 on:
   workflow_dispatch:
     inputs:
+      runner:
+        description: Runner used for this manually dispatched simulation
+        type: choice
+        options: [hosted, session]
+        default: hosted
       game:
         description: Controlled fixture game target (no real game/mod assets)
         type: choice
@@ -14,7 +19,7 @@ permissions:
 
 jobs:
   simulate:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner == 'session' && fromJSON('["self-hosted", "Linux", "modsync-session"]') || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -26,16 +31,30 @@ jobs:
           path: corpus
           persist-credentials: false
       - uses: pnpm/action-setup@v4
+        if: inputs.runner != 'session'
         with:
           version: 10.33.0
       - uses: actions/setup-node@v4
+        if: inputs.runner != 'session'
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
+      - name: Use the session Node runtime and pinned Corepack pnpm shim
+        if: inputs.runner == 'session'
+        run: |
+          corepack_shim_dir="$RUNNER_TEMP/modsync-corepack"
+          mkdir -p "$corepack_shim_dir"
+          corepack enable --install-directory "$corepack_shim_dir" pnpm
+          echo "$corepack_shim_dir" >> "$GITHUB_PATH"
+          node --version
+          corepack pnpm --version
+      - name: Install dependencies
+        env:
+          ELECTRON_GET_USE_PROXY: ${{ inputs.runner == 'session' && '1' || '' }}
+        run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm build
       - name: Audit guides and run controlled CLI fixtures
-        run: pnpm exec tsx tools/synthetic-modbuild.ts --corpus corpus --output artifacts/synthetic-cli --game "${{ inputs.game }}"
+        run: corepack pnpm exec tsx tools/synthetic-modbuild.ts --corpus corpus --output artifacts/synthetic-cli --game "${{ inputs.game }}"
       - name: Upload audit, CLI logs, output proofs and checkpoints
         if: always()
         uses: actions/upload-artifact@v4
