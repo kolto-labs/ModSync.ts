@@ -31,6 +31,11 @@ const PRELOAD = path.join(__dirname, "preload.cjs");
 // instance quits immediately and its argv (possibly an nxm:// link) is
 // delivered to the primary through the `second-instance` event.
 // ---------------------------------------------------------------------------
+// Automated or portable sessions can choose an isolated profile before the
+// singleton lock is acquired; ordinary launches retain Electron's default.
+if (process.env.MODSYNC_USER_DATA_DIRECTORY) {
+  app.setPath("userData", path.resolve(process.env.MODSYNC_USER_DATA_DIRECTORY));
+}
 const hasLock = app.requestSingleInstanceLock();
 if (!hasLock) {
   app.quit();

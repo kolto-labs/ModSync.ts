@@ -41,13 +41,16 @@ for (const fixture of manifest.games) {
   const derived = "componentCount" in fixture;
   const dir = join(output, `${fixture.game}-${derived ? "fullmd-derived" : "features"}`);
   await mkdir(dir, { recursive: true });
+  const profile = join(dir, "electron-profile");
+  const configRoot = join(dir, "native-config");
+  await Promise.all([mkdir(profile, { recursive: true }), mkdir(configRoot, { recursive: true })]);
   console.log(`Starting native GUI lane ${fixture.game} ${derived ? "fullmd-derived" : "features"}`);
   const logs: string[] = [];
   const errors: string[] = [];
   const desktop = await electron.launch({
     executablePath,
-    args: [...(process.platform === "linux" ? ["--no-sandbox"] : []), resolve("packages/electron/dist/main.js")],
-    env: { ...process.env, MODSYNC_SETTINGS_PATH: fixture.settings },
+    args: [...(process.platform === "linux" ? ["--no-sandbox"] : []), `--user-data-dir=${profile}`, resolve("packages/electron/dist/main.js")],
+    env: { ...process.env, MODSYNC_SETTINGS_PATH: fixture.settings, MODSYNC_USER_DATA_DIRECTORY: profile, XDG_CONFIG_HOME: configRoot, APPDATA: configRoot },
     timeout: 60_000,
   }).catch(async (error) => {
     await writeFile(join(dir, "launch-error.log"), [error.stack ?? String(error), ...(Array.isArray(error.log) ? error.log : [])].join("\n"));
@@ -58,6 +61,9 @@ for (const fixture of manifest.games) {
   desktop.process().stderr?.on("data", (chunk) => logs.push(String(chunk)));
   let page;
   try {
+    const actualProfile = await desktop.evaluate(({ app }) => app.getPath("userData"));
+    assert.equal(resolve(actualProfile), resolve(profile), "Native singleton/profile isolation was not applied");
+    await writeFile(join(dir, "native-profile.json"), JSON.stringify({ expected: profile, actual: actualProfile, isolated: true }, null, 2));
     page = await desktop.firstWindow();
     page.setDefaultTimeout(30_000);
     page.on("console", (message) => {
