@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { connect } from "node:net";
 import { createModSyncServer, stateOf } from "./createServer.js";
 import type { ModSyncServer } from "./types.js";
 import { createInstructionFile } from "@modsync/core";
@@ -22,6 +23,24 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 describe("server lifecycle and mutation guards", () => {
+  it("closes within a bounded interval when a WebSocket peer never acknowledges shutdown", async () => {
+    const service = await server();
+    const base = new URL(await service.listen(0, "127.0.0.1"));
+    const peer = connect(Number(base.port), "127.0.0.1");
+    try {
+      const upgraded = new Promise<void>((resolve, reject) => {
+        peer.once("error", reject);
+        peer.once("data", (response) => response.toString().includes("101 Switching Protocols") ? resolve() : reject(new Error("WebSocket upgrade failed")));
+      });
+      peer.write(`GET /ws?token=secret HTTP/1.1\r\nHost: ${base.host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`);
+      await upgraded;
+      const started = performance.now();
+      await service.close();
+      expect(performance.now() - started).toBeLessThan(5_000);
+    } finally {
+      peer.destroy();
+    }
+  });
   it("requires authentication for API access", async () => {
     const { app } = await server();
     expect((await app.inject({ url: "/api/settings" })).statusCode).toBe(401);

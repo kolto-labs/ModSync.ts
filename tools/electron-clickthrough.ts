@@ -3,9 +3,25 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
-import { _electron as electron } from "playwright";
+import { _electron as electron, type ElectronApplication } from "playwright";
+import { closeElectron, withDeadline } from "./electron-shutdown.js";
 
 import { auditCorpus, prepareSyntheticFixture, verifySyntheticFiles, prepareDerivedFixture, verifyDerivedFiles, verifyBaselineFiles, snapshotTree } from "./synthetic-fixtures.js";
+async function finalizeDesktop(desktop: ElectronApplication, dir: string, logs: string[]): Promise<void> {
+    let traceFailure: unknown;
+    try {
+      await withDeadline(desktop.context().tracing.stop({ path: join(dir, "trace.zip") }), 15_000, "Electron trace finalization");
+    } catch (error) {
+      traceFailure = error;
+      await writeFile(join(dir, "trace-error.log"), error instanceof Error ? error.message : String(error));
+    }
+    try {
+      await closeElectron(desktop, dir);
+    } finally {
+      await writeFile(join(dir, "electron.log"), logs.join("\n").replace(/([?&]token=|Bearer )[a-zA-Z0-9]+/g, "$1[redacted]"));
+    }
+    if (traceFailure) throw traceFailure;
+}
 const args = process.argv.slice(2);
 function flag(name: string, fallback?: string): string {
   const index = args.indexOf(name);
@@ -25,6 +41,7 @@ for (const fixture of manifest.games) {
   const derived = "componentCount" in fixture;
   const dir = join(output, `${fixture.game}-${derived ? "fullmd-derived" : "features"}`);
   await mkdir(dir, { recursive: true });
+  console.log(`Starting native GUI lane ${fixture.game} ${derived ? "fullmd-derived" : "features"}`);
   const logs: string[] = [];
   const errors: string[] = [];
   const desktop = await electron.launch({
@@ -165,8 +182,9 @@ for (const fixture of manifest.games) {
     throw error;
   } finally {
     await writeFile(join(dir, "electron.log"), logs.join("\n").replace(/([?&]token=|Bearer )[a-zA-Z0-9]+/g, "$1[redacted]"));
-    await desktop.context().tracing.stop({ path: join(dir, "trace.zip") }).catch(() => undefined);
-    await desktop.close();
+    console.log(`Closing native GUI lane ${fixture.game} ${derived ? "fullmd-derived" : "features"}`);
+    await finalizeDesktop(desktop, dir, logs);
+    console.log(`Graceful Electron exit verified for ${fixture.game} ${derived ? "fullmd-derived" : "features"}`);
   }
 }
 await writeFile(join(output, "gui-results.json"), JSON.stringify({ runtime: "native-electron", platform: process.platform, results }, null, 2));

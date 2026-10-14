@@ -81,7 +81,9 @@ export async function createModSyncServer(opts: ModSyncServerOptions = {}): Prom
     allowedHeaders: ["Authorization", "Content-Type"],
     exposedHeaders: ["x-log-last-seq", "x-log-first-seq"],
   });
-  await app.register(websocket, { options: { maxPayload: 1024 * 1024 } });
+  // A destroyed renderer cannot acknowledge the WebSocket close handshake.
+  // Bound that handshake so desktop shutdown does not wait ws's 30-second default.
+  await app.register(websocket, { options: { maxPayload: 1024 * 1024, closeTimeout: 1_000 } });
 
   // Accept text bodies (markdown / TOML uploads) as strings in addition to JSON.
   app.addContentTypeParser(["text/plain", "text/markdown", "application/toml"], { parseAs: "string" }, (_req, body, done) => {
