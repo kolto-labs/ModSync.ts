@@ -41,7 +41,7 @@ export function App() {
             {s.showDownloads ? "Hide Downloads" : "Show Downloads"}
           </button>
           <label className="check small" title="Hides descriptions and links, and removes full-build-only mods">
-            <input type="checkbox" checked={s.spoilerFree} onChange={(e) => actions.setSpoilerFree(e.target.checked)} /> Spoiler-free
+            <input type="checkbox" disabled={s.install.running} checked={s.spoilerFree} onChange={(e) => actions.setSpoilerFree(e.target.checked)} /> Spoiler-free
           </label>
           <button className="btn btn-sm" onClick={() => actions.toggleTheme()} title="Toggle theme">
             {s.theme === "dark" ? "☀ Light" : "☾ Dark"}

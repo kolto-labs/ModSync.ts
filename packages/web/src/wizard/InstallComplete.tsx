@@ -6,6 +6,7 @@ import type { InstallSummary } from "../types";
 export function InstallCompletePanel({ phase }: { phase: "base" | "widescreen" }) {
   const s = useAppState();
   const summary: InstallSummary | undefined = phase === "base" ? s.install.baseSummary ?? s.install.summary : s.install.widescreenSummary ?? s.install.summary;
+  const [showAllSessions, setShowAllSessions] = useState(false);
   const [restoring, setRestoring] = useState<string | null>(null);
 
   useEffect(() => {
@@ -13,7 +14,7 @@ export function InstallCompletePanel({ phase }: { phase: "base" | "widescreen" }
   }, []);
 
   const duration = summary ? Math.max(0, new Date(summary.finishedAt).getTime() - new Date(summary.startedAt).getTime()) : 0;
-  const sessions = summary?.checkpointSessionId ? s.checkpoints.filter((c) => c.id === summary.checkpointSessionId) : s.checkpoints.slice(0, 1);
+  const sessions = showAllSessions ? s.checkpoints : summary?.checkpointSessionId ? s.checkpoints.filter((c) => c.id === summary.checkpointSessionId) : s.checkpoints.slice(0, 1);
   const touched = summary?.mods.reduce((n, m) => n + m.instructionResults.reduce((k, r) => k + r.touched.length, 0), 0) ?? 0;
 
   return (
@@ -83,9 +84,13 @@ export function InstallCompletePanel({ phase }: { phase: "base" | "widescreen" }
             Refresh
           </button>
         </div>
+        <label className="check small">
+          <input type="checkbox" checked={showAllSessions} onChange={(e) => setShowAllSessions(e.target.checked)} />
+          Show all checkpoint sessions
+        </label>
         {sessions.length === 0 && <p className="muted">No checkpoints were recorded.</p>}
         {sessions.map((session) => (
-          <div key={session.id}>
+          <div key={session.id} data-checkpoint-session={session.id}>
             <div className="muted small">
               Session {session.id} · {new Date(session.createdAt).toLocaleString()} · {session.checkpoints.length} checkpoints
             </div>

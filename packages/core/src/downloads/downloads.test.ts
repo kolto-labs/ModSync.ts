@@ -269,6 +269,40 @@ describe("DownloadManager", () => {
     expect(ranges[1]).toMatch(/^bytes=\d+-$/);
   });
 
+  it("resumes immediately after pause without overlapping writers", async () => {
+    const dir = await tmp();
+    const m = new DownloadManager({ modDirectory: dir, progressIntervalMs: 0 });
+    const item = m.enqueue("g", `${base}/slow.zip`);
+    let restarted = false;
+    m.on("event", (event) => {
+      if (!restarted && event.type === "download-progress" && event.receivedBytes > 0) {
+        restarted = true;
+        m.pause();
+        m.start();
+      }
+    });
+    m.start();
+    await m.waitForIdle();
+    expect(m.get(item.id)?.state).toBe("done");
+    expect(m.get(item.id)?.sha1).toBe(FILE_SHA1);
+  });
+
+  it("keeps same-name concurrent downloads separate", async () => {
+    const dir = await tmp();
+    const m = new DownloadManager({ modDirectory: dir });
+    const first = m.enqueue("a", `${base}/slow.zip`);
+    const second = m.enqueue("b", `${base}/slow.zip`);
+    m.start();
+    await m.waitForIdle();
+    const a = m.get(first.id)!;
+    const b = m.get(second.id)!;
+    expect(a.state).toBe("done");
+    expect(b.state).toBe("done");
+    expect(a.path).not.toBe(b.path);
+    expect(sha1(await readFile(a.path!))).toBe(FILE_SHA1);
+    expect(sha1(await readFile(b.path!))).toBe(FILE_SHA1);
+  });
+
   it("flags HTML pages and 401/403 as needs-browser, other errors as failed", async () => {
     const dir = await tmp();
     const m = new DownloadManager({ modDirectory: dir });

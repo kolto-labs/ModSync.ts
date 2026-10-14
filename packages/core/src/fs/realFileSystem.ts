@@ -12,6 +12,7 @@
 
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
+import * as nodePath from "node:path";
 import * as fsp from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 
@@ -31,6 +32,15 @@ function isMissing(err: unknown): boolean {
 
 export class RealFileSystem implements FileSystemPort {
   readonly isVirtual = false;
+
+  async isSymbolicLink(path: string): Promise<boolean> {
+    try { return (await fsp.lstat(path)).isSymbolicLink(); }
+    catch (err) { if (isMissing(err)) return false; throw err; }
+  }
+
+  async realpath(path: string): Promise<string> {
+    return normalizePath(await fsp.realpath((await this.resolveExisting(path)) ?? path));
+  }
 
   async exists(path: string): Promise<boolean> {
     return (await this.resolveExisting(path)) !== undefined;
@@ -71,8 +81,17 @@ export class RealFileSystem implements FileSystemPort {
     const actual = await this.resolveExisting(path);
     if (actual === undefined) return [];
     const out: string[] = [];
+    const canonicalRoot = await fsp.realpath(actual);
+    const visited = new Set<string>();
     const visit = async (dir: string): Promise<void> => {
+      const canonical = await fsp.realpath(dir);
+      if (visited.has(canonical)) return;
+      visited.add(canonical);
       for (const entry of await this.readDir(dir)) {
+        const relative = nodePath.relative(canonicalRoot, await fsp.realpath(entry.path));
+        if (relative === ".." || relative.startsWith(`..${nodePath.sep}`) || nodePath.isAbsolute(relative)) {
+          throw new Error(`Cannot walk symbolic link outside root: ${entry.path}`);
+        }
         if (entry.isDirectory) await visit(entry.path);
         else out.push(entry.path);
       }

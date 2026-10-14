@@ -10,6 +10,7 @@ import { parseCleanList } from "../../serialization/cleanlist.js";
 import type { InstallContext } from "../context.js";
 import { executeChoose, chooseFolderCandidates, isOptionChoose, DEFAULT_CHOOSE_DESTINATION } from "./choose.js";
 import { executeCleanList, planCleanList } from "./cleanList.js";
+import { joinPath } from "../../fs/paths.js";
 import { planTransfer, resolveDestination, resolveSources } from "./common.js";
 import { executeCopy } from "./copy.js";
 import { executeDelete } from "./delete.js";
@@ -144,7 +145,15 @@ export async function predictTouched(ctx: InstallContext, instruction: Instructi
       case "Extract": {
         const sources = await resolveSources(ctx, instruction.source);
         const dest = instruction.destination?.trim() ? await resolveDestination(ctx, instruction.destination) : undefined;
-        return sources.flatMap((s) => s.matches).map((a) => dest ?? defaultExtractDir(a));
+        const out: string[] = [];
+        for (const archive of sources.flatMap((source) => source.matches)) {
+          const target = dest ?? defaultExtractDir(archive);
+          const reader = await ctx.openArchive(archive, { sevenZipPath: ctx.settings.sevenZipPath });
+          try {
+            out.push(target, ...(await reader.list()).map((entry) => joinPath(target, entry.path)));
+          } finally { await reader.close(); }
+        }
+        return out;
       }
       case "Choose": {
         if (isOptionChoose(instruction)) return [];

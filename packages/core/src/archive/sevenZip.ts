@@ -13,7 +13,7 @@
 
 import { spawn } from "node:child_process";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -22,8 +22,8 @@ import SevenZipImport from "7z-wasm";
 import type { SevenZipModule, SevenZipModuleOptions } from "7z-wasm";
 
 import { baseName, joinPath, normalizePath, parentPath, toNative } from "../fs/paths.js";
-import type { ArchiveEntry, ArchiveFormat, ArchiveReader } from "../ports/archive.js";
-import { ArchiveEntryNotFoundError, ArchiveError, findEntry, normalizeEntryPath, sortEntries } from "./common.js";
+import type { ArchiveEntry, ArchiveExtractOptions, ArchiveFormat, ArchiveReader } from "../ports/archive.js";
+import { ArchiveEntryNotFoundError, ArchiveError, extractThroughStaging, findEntry, normalizeEntryPath, sortEntries } from "./common.js";
 
 type SevenZipFactory = (opts?: Partial<SevenZipModuleOptions>) => Promise<SevenZipModule>;
 
@@ -73,6 +73,7 @@ export function parseSevenZipListing(text: string): ArchiveEntry[] {
     const normalized = normalizeEntryPath(rawPath);
     if (!normalized) continue;
     const attributes = fields.get("Attributes") ?? "";
+    if (fields.has("Symbolic Link") || fields.has("Hard Link") || /(?:^|\s)l[rwx-]{9}/.test(attributes)) throw new ArchiveError("Archive links are not supported", "");
     const isDirectory =
       normalized.isDirectory || attributes.startsWith("D") || attributes.includes("D_") || fields.get("Folder") === "+";
     const key = normalized.path.toLowerCase();
@@ -179,13 +180,13 @@ export async function runSevenZipWasm(
       code = (module.callMain(args) as unknown as number | undefined) ?? 0;
     } catch (err) {
       resetRuntime();
-      throw new Error(`7z-wasm crashed running "${args.join(" ")}": ${describeWasmError(err)}`);
+      throw new Error(`7z-wasm crashed running "${args.join(" ")}": ${describeWasmError(err)}`, { cause: err });
     }
     return { code, stdout: sink.stdout.join("\n"), stderr: sink.stderr.join("\n") };
   } finally {
     for (const p of created) {
       try {
-        FS.unlink(p);
+        removeMemfsTree(FS, p);
       } catch {
         /* ignore */
       }
@@ -223,9 +224,9 @@ function nextMountPoint(): string {
 
 // ---- CLI fallback ----------------------------------------------------------
 
-export function runSevenZipCli(sevenZipPath: string, args: string[]): Promise<SevenZipRunResult> {
+export function runSevenZipCli(sevenZipPath: string, args: string[], signal?: AbortSignal): Promise<SevenZipRunResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(sevenZipPath, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const child = spawn(sevenZipPath, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true, signal });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     child.stdout.on("data", (c: Buffer) => stdout.push(c));
@@ -272,21 +273,14 @@ export class SevenZipArchive implements ArchiveReader {
     return (await this.records()).map((e) => ({ ...e }));
   }
 
-  async extract(destDir: string, filter?: (entry: ArchiveEntry) => boolean): Promise<string[]> {
-    const dest = normalizePath(destDir);
-    await mkdir(dest, { recursive: true });
-    const entries = await this.records();
-    const files: ArchiveEntry[] = [];
-    for (const entry of entries) {
-      if (filter && !filter(entry)) continue;
-      if (entry.isDirectory) await mkdir(joinPath(dest, entry.path), { recursive: true });
-      else files.push(entry);
-    }
-    if (files.length === 0) return [];
-    const wantAll = !filter || files.length === entries.filter((e) => !e.isDirectory).length;
-    const listfile = wantAll ? undefined : files.map((f) => f.path).join("\n") + "\n";
-    await this.extractTo(dest, listfile);
-    return files.map((f) => joinPath(dest, f.path));
+  async extract(destDir: string, filter?: (entry: ArchiveEntry) => boolean, options: ArchiveExtractOptions = {}): Promise<string[]> {
+    const entries = (await this.records()).filter((entry) => !filter || filter(entry));
+    const files = entries.filter((entry) => !entry.isDirectory);
+    return extractThroughStaging(normalizePath(destDir), entries, async (temp) => {
+      options.signal?.throwIfAborted();
+      if (files.length) await this.extractTo(temp, files.map((entry) => entry.path).join("\n") + "\n", options.signal);
+      options.signal?.throwIfAborted();
+    }, options);
   }
 
   async readEntry(entryPath: string): Promise<Uint8Array> {
@@ -330,15 +324,15 @@ export class SevenZipArchive implements ArchiveReader {
   }
 
   /** Extract into a host directory, optionally restricted to a newline-separated list of entry paths. */
-  private async extractTo(dest: string, listfile: string | undefined): Promise<void> {
+  private async extractTo(dest: string, listfile: string | undefined, signal?: AbortSignal): Promise<void> {
     const input = await this.input();
     let cliListfile: string | undefined;
     try {
       await this.run(
-        ["x", "-y", ...QUIET, "-scsUTF-8", ...this.passwordArgs()],
+        ["x", "-y", ...QUIET, "-scsUTF-8", "-spd", ...this.passwordArgs()],
         input,
         (mounts) => {
-          const args = ["x", "-y", ...QUIET, "-scsUTF-8", ...this.passwordArgs(), `-o${mounts.output}`];
+          const args = ["x", "-y", ...QUIET, "-scsUTF-8", "-spd", ...this.passwordArgs(), `-o${mounts.output}`];
           if (listfile !== undefined) args.push(`-i@${mounts.listfile}`);
           args.push(joinPath(mounts.input, baseName(input)));
           return args;
@@ -346,8 +340,9 @@ export class SevenZipArchive implements ArchiveReader {
         {
           output: dest,
           listfile,
+          signal,
           cliArgs: async () => {
-            const args = ["x", "-y", ...QUIET, "-scsUTF-8", ...this.passwordArgs(), `-o${toNative(dest)}`];
+            const args = ["x", "-y", ...QUIET, "-scsUTF-8", "-spd", ...this.passwordArgs(), `-o${toNative(dest)}`];
             if (listfile !== undefined) {
               const dir = await this.tempDir();
               cliListfile = path.join(dir, "listfile.txt");
@@ -372,8 +367,9 @@ export class SevenZipArchive implements ArchiveReader {
     baseArgs: string[],
     input: string,
     wasmArgs: (mounts: { input: string; output: string; listfile: string }) => string[],
-    extra: { output?: string; listfile?: string; cliArgs?: () => Promise<string[]> } = {},
+    extra: { output?: string; listfile?: string; signal?: AbortSignal; cliArgs?: () => Promise<string[]> } = {},
   ): Promise<SevenZipRunResult> {
+    extra.signal?.throwIfAborted();
     let wasmError: Error | undefined;
     try {
       const inputMount = nextMountPoint();
@@ -392,9 +388,10 @@ export class SevenZipArchive implements ArchiveReader {
       wasmError = err instanceof Error ? err : new Error(String(err));
     }
 
+    extra.signal?.throwIfAborted();
     if (!this.sevenZipPath) throw wasmError;
     const args = extra.cliArgs ? await extra.cliArgs() : [...baseArgs, toNative(input)];
-    const result = await runSevenZipCli(this.sevenZipPath, args);
+    const result = await runSevenZipCli(this.sevenZipPath, args, extra.signal);
     if (result.code === 0) return result;
     throw new ArchiveError(`${wasmError.message}; CLI fallback: ${this.describeFailure(this.sevenZipPath, result)}`, this.archivePath, {
       cause: wasmError,

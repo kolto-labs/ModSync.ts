@@ -63,6 +63,8 @@ export interface GraphResult {
 
 export interface InstallStatus {
   running: boolean;
+  phase?: "base" | "widescreen";
+  order?: Guid[];
   currentMod?: Guid;
   summary?: InstallSummary;
   pendingPrompt?: UserPrompt;

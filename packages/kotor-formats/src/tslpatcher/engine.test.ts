@@ -80,8 +80,7 @@ Label=Feat
 Value=2DAMEMORY0
 
 [CompileList]
-File0=missing.nss
-File1=present.nss
+File0=present.nss
 
 [HACKList]
 File0=hack.ncs
@@ -142,7 +141,7 @@ async function buildFixture(): Promise<void> {
 
   const append = new Tlk(0);
   append.add("New Zero");
-  append.add("New One", "n_new_001");
+  append.add("New One", "n_new_001", 2.5);
   await fsp.writeFile(path.join(dataDir, "append.tlk"), writeTlk(append));
   await fsp.writeFile(path.join(dataDir, "new_item.uti"), smallGff("UTI", "new_item"));
   await fsp.writeFile(path.join(dataDir, "m_area.are"), smallGff("ARE", "replaced"));
@@ -168,6 +167,7 @@ describe("TslPatcher", () => {
     const dialog = readTlk(await fsp.readFile(path.join(gameDir, "dialog.tlk")));
     expect(dialog.entries.map((e) => e.text)).toEqual(["Zero", "One", "Two", "New Zero", "New One"]);
     expect(dialog.entries[4]!.soundResRef).toBe("n_new_001");
+    expect(dialog.entries[4]!.soundLength).toBe(2.5);
     expect(patcher.memory.getStrRef(0)).toBe(3);
     expect(patcher.memory.getStrRef(1)).toBe(4);
 
@@ -209,7 +209,7 @@ describe("TslPatcher", () => {
     expect((getFieldByPath(original, "FirstName")!.value as GffLocString).strref).toBe(5);
 
     // CompileList
-    expect(log.warnings.some((w) => /script compilation not supported/.test(w) && /missing\.nss/.test(w))).toBe(true);
+
     expect(log.warnings.some((w) => /compiled from precompiled ncs/.test(w) && /present\.nss/.test(w))).toBe(true);
     expect(Array.from(await fsp.readFile(path.join(gameDir, "Override", "present.ncs")))).toEqual([1, 2, 3]);
 
@@ -267,6 +267,85 @@ describe("TslPatcher", () => {
     expect(await fsp.readdir(gameDir)).not.toContain("Override");
     expect(await fsp.readdir(path.join(gameDir, "override"))).toContain("p_test_new.utc");
     expect(readTlk(await fsp.readFile(path.join(gameDir, "DIALOG.TLK"))).entries).toHaveLength(5);
+  });
+
+  it.each(["../outside", "/outside", "C:\\outside", "Modules/../../outside"])("rejects destination escaping the game: %s", async (destination) => {
+    const config = parseChangesIni(`[InstallList]\ninstall_folder0=${destination}\n[${destination}]\nReplace0=new_item.uti`);
+    const patcher = new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() });
+    const log = await patcher.apply(config);
+    expect(log.errors.join("\n")).toMatch(/must stay within/);
+    expect(log.filesWritten).toEqual([]);
+  });
+
+  it("rejects a destination directory symlink outside the game", async () => {
+    await fsp.symlink(modDir, path.join(gameDir, "linked"), "dir");
+    const config = parseChangesIni(`[InstallList]\ninstall_folder0=linked\n[linked]\nReplace0=new_item.uti`);
+    const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(config);
+    expect(log.errors.join("\n")).toMatch(/symbolic link/);
+    expect(log.filesWritten).toEqual([]);
+    expect(await new NodePatcherFs().exists(path.join(modDir, "new_item.uti"))).toBe(false);
+  });
+
+  it("rejects a destination file symlink outside the game", async () => {
+    const outside = path.join(modDir, "outside.uti");
+    await fsp.writeFile(outside, "untouched");
+    await fsp.symlink(outside, path.join(gameDir, "Override", "new_item.uti"));
+    const config = parseChangesIni(`[InstallList]\ninstall_folder0=Override\n[Override]\nReplace0=new_item.uti`);
+    const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(config);
+    expect(log.errors.join("\n")).toMatch(/symbolic link/);
+    expect(await fsp.readFile(outside, "utf8")).toBe("untouched");
+  });
+
+  it("rejects a source file symlink outside tslpatchdata", async () => {
+    await fsp.symlink(path.join(gameDir, "dialog.tlk"), path.join(dataDir, "linked.tlk"));
+    const config = parseChangesIni(`[InstallList]\ninstall_folder0=Override\n[Override]\nReplace0=linked.tlk`);
+    const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(config);
+    expect(log.errors.join("\n")).toMatch(/symbolic link/);
+    expect(log.filesWritten).toEqual([]);
+  });
+
+  it("rejects a source folder escaping tslpatchdata", async () => {
+    const config = parseChangesIni(`[InstallList]\ninstall_folder0=Override\n[Override]\nReplace0=new_item.uti\n[new_item.uti]\n!SourceFolder=..`);
+    const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(config);
+    expect(log.errors.join("\n")).toMatch(/must stay within/);
+    expect(log.filesWritten).toEqual([]);
+  });
+
+  it("dry run resolves new files case-insensitively across sections", async () => {
+    const config = parseChangesIni(`[InstallList]\ninstall_folder0=NewFolder\n[NewFolder]\nReplace0=new_item.uti\n[GFFList]\nFile0=NEW_ITEM.UTI\n[NEW_ITEM.UTI]\n!Destination=NewFolder\nTag=patched`);
+    config.gff[0]!.destination = "newfolder";
+    const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs(), dryRun: true }).apply(config);
+    expect(log.errors).toEqual([]);
+    expect(log.filesWritten).toEqual([path.join(gameDir, "NewFolder", "new_item.uti")]);
+    expect(await new NodePatcherFs().exists(path.join(gameDir, "NewFolder"))).toBe(false);
+  });
+
+  it("reports unavailable source compilation as an error", async () => {
+    const config = parseChangesIni(`[CompileList]\nFile0=missing.nss`);
+    const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(config);
+    expect(log.errors.join("\n")).toMatch(/requires a compiler or precompiled/);
+    expect(log.filesWritten).toEqual([]);
+  });
+
+  it("rejects a precompiled binary when source memory substitutions require compilation", async () => {
+    await fsp.writeFile(path.join(dataDir, "present.nss"), "void main() { int ref = #StrRef0#; }");
+    const config = parseChangesIni(`[CompileList]\nFile0=present.nss`);
+    const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(config);
+    expect(log.errors.join("\n")).toMatch(/requiring source compilation/);
+    expect(log.filesWritten).toEqual([]);
+  });
+
+  it("keeps existing precompiled scripts unless replacement is requested", async () => {
+    const target = path.join(gameDir, "Override", "present.ncs");
+    await fsp.writeFile(target, Uint8Array.from([9, 8, 7]));
+    const config = parseChangesIni(`[CompileList]\nFile0=present.nss`);
+    const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(config);
+    expect(log.errors).toEqual([]);
+    expect(Array.from(await fsp.readFile(target))).toEqual([9, 8, 7]);
+    expect(log.filesWritten).toEqual([]);
+    config.compile[0]!.replaceFile = true;
+    await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(config);
+    expect(Array.from(await fsp.readFile(target))).toEqual([1, 2, 3]);
   });
 
   it("dry run reads and resolves everything but writes nothing", async () => {

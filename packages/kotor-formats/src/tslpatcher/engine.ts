@@ -6,7 +6,7 @@
  * did not exist are listed in `<backup>/remove these files.txt`.
  */
 import * as path from "node:path";
-import { encodeCp1252 } from "../binary.js";
+import { decodeCp1252, encodeCp1252 } from "../binary.js";
 import { Encapsulated, encapsulatedFileTypeFromPath, isEncapsulatedPath, readEncapsulated, writeEncapsulated } from "../erf.js";
 import {
   GffFieldType,
@@ -158,7 +158,7 @@ export class TslPatcher {
 
     try {
       if (!(await this.checkRequired(config.settings))) return this.log;
-      await this.processTlk(config.tlk);
+      await this.guard("TLKList", () => this.processTlk(config.tlk));
       await this.processInstall(config.install);
       for (const f of config.twoda) await this.guard(`2DAList ${f.filename}`, () => this.process2da(f));
       for (const f of config.gff) await this.guard(`GFFList ${f.filename}`, () => this.processGff(f));
@@ -210,6 +210,14 @@ export class TslPatcher {
       entries = await this.fs.readDir(dir);
       this.dirCache.set(dir, entries);
     }
+    // Dry runs must see files and parent directories from earlier sections.
+    for (const abs of this.overlay.keys()) {
+      const relative = path.relative(dir, abs);
+      if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) {
+        const first = relative.split(path.sep)[0]!;
+        if (!entries.includes(first)) entries.push(first);
+      }
+    }
     return entries;
   }
 
@@ -225,7 +233,12 @@ export class TslPatcher {
    * Unmatched trailing segments are appended as written.
    */
   private async resolveCase(base: string, rel: string): Promise<{ path: string; exists: boolean }> {
+    const portable = rel.replace(/\\/g, "/");
+    if (path.posix.isAbsolute(portable) || /^[a-z]:/i.test(portable) || portable.split("/").includes("..")) {
+      throw new PatcherFileError(`path "${rel}" must stay within ${base}`);
+    }
     const segs = normRel(rel).split("/").filter((s) => s !== "");
+    const canonicalBase = this.fs.realpath && await this.fs.exists(base) ? await this.fs.realpath(base) : base;
     let cur = base;
     for (let i = 0; i < segs.length; i++) {
       const seg = segs[i]!;
@@ -239,8 +252,18 @@ export class TslPatcher {
         return { path: path.join(cur, ...segs.slice(i)), exists: false };
       }
       cur = path.join(cur, match);
+      if (await this.fs.isSymbolicLink?.(cur) && !await this.fs.exists(cur)) {
+        throw new PatcherFileError(`path "${rel}" contains a dangling symbolic link`);
+      }
+      if (this.fs.realpath && await this.fs.exists(cur)) {
+        const canonical = await this.fs.realpath(cur);
+        const relative = path.relative(canonicalBase, canonical);
+        if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+          throw new PatcherFileError(`path "${rel}" resolves outside ${base} through a symbolic link`);
+        }
+      }
     }
-    const exists = segs.length === 0 ? true : await this.fs.exists(cur);
+    const exists = segs.length === 0 ? true : this.overlay.has(cur) || await this.fs.exists(cur);
     return { path: cur, exists };
   }
 
@@ -256,6 +279,10 @@ export class TslPatcher {
   }
 
   private parseDestination(dest: string): Destination {
+    const portable = dest.replace(/\\/g, "/");
+    if (path.posix.isAbsolute(portable) || /^[a-z]:/i.test(portable) || portable.split("/").includes("..")) {
+      throw new PatcherFileError(`destination "${dest}" must stay within the game directory`);
+    }
     const rel = normRel(dest);
     return { rel, isArchive: isEncapsulatedPath(rel) };
   }
@@ -480,12 +507,12 @@ export class TslPatcher {
       }
       return tlk;
     };
-    const entryOf = async (file: string | undefined, index: number): Promise<{ text: string; sound: string }> => {
+    const entryOf = async (file: string | undefined, index: number): Promise<{ text: string; sound: string; soundLength?: number }> => {
       const name = file ?? cfg.sourceFile;
       const tlk = await loadSource(name);
       const e = tlk.entries[index];
       if (!e) throw new PatcherFileError(`TLKList: ${name} has no entry ${index} (${tlk.entries.length} entries)`);
-      return { text: e.text, sound: e.soundResRef };
+      return { text: e.text, sound: e.soundResRef, ...(e.soundLength === undefined ? {} : { soundLength: e.soundLength }) };
     };
 
     let applied = 0;
@@ -493,13 +520,13 @@ export class TslPatcher {
       try {
         if (m.kind === "append") {
           const e = await entryOf(m.sourceFile, m.sourceIndex);
-          const idx = dialog.add(e.text, e.sound);
+          const idx = dialog.add(e.text, e.sound, e.soundLength);
           this.mem.setStrRef(m.token, idx);
           this.logger.debug(`TLKList: StrRef${m.token} -> ${idx}`);
         } else if (m.kind === "replace") {
           const e = await entryOf(m.sourceFile, m.sourceIndex);
           if (m.dialogIndex >= dialog.entries.length) throw new PatcherFileError(`TLKList: cannot replace strref ${m.dialogIndex}, dialog.tlk has ${dialog.entries.length} entries`);
-          dialog.replace(m.dialogIndex, e.text, e.sound);
+          dialog.replace(m.dialogIndex, e.text, e.sound, e.soundLength);
           this.mem.setStrRef(m.dialogIndex, m.dialogIndex);
         } else {
           const idx = dialog.add(m.text, m.sound);
@@ -864,12 +891,19 @@ export class TslPatcher {
     const ncsName = cfg.filename.replace(/\.nss$/i, "") + ".ncs";
     const src = await this.findSource(ncsName, cfg.sourceFolder);
     if (!src) {
-      this.warn(`CompileList: script compilation not supported; ${cfg.filename} skipped (no precompiled ${ncsName} in tslpatchdata)`);
-      return;
+      throw new PatcherFileError(`script compilation unavailable: ${cfg.filename} requires a compiler or precompiled ${ncsName} in tslpatchdata`);
+    }
+    const source = await this.findSource(cfg.filename, cfg.sourceFolder);
+    if (source && /#(?:2DAMEMORY|StrRef)\d+#/i.test(decodeCp1252(await this.fs.readFile(source)))) {
+      throw new PatcherFileError(`${cfg.filename} contains memory substitutions requiring source compilation; cannot use precompiled ${ncsName}`);
     }
     this.warn(`CompileList: ${cfg.filename} installed from precompiled ${ncsName} (compiled from precompiled ncs, not from source)`);
     const dest = this.parseDestination(cfg.destination);
     const name = cfg.saveAs ? cfg.saveAs.replace(/\.nss$/i, "") + ".ncs" : ncsName;
+    if (!cfg.replaceFile && await this.gameResourceExists(dest, name)) {
+      this.warn(`CompileList: ${name} already exists in ${dest.rel}; skipping (use !ReplaceFile=1 to overwrite)`);
+      return;
+    }
     await this.checkOverrideType(dest, name, cfg.overrideType);
     await this.writeGameResource(dest, name, await this.fs.readFile(src));
   }

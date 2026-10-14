@@ -28,6 +28,10 @@ export interface DirEntry {
 export interface FileSystemPort {
   /** True if a file or directory exists at the path (case-insensitive lookup allowed). */
   exists(path: string): Promise<boolean>;
+  /** Canonical path after resolving symbolic links, when supported by the adapter. */
+  realpath?(path: string): Promise<string>;
+  /** Detect links even when their target does not exist. */
+  isSymbolicLink?(path: string): Promise<boolean>;
   stat(path: string): Promise<FileStat | undefined>;
   /** Non-recursive listing. */
   readDir(path: string): Promise<DirEntry[]>;

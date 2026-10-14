@@ -4,6 +4,7 @@
  * helpers which talk to the API client and push results into the store.
  */
 import { useSyncExternalStore } from "react";
+import { goTo } from "../wizard/navigation";
 import { api, type ConnectionState, type EventEnvelope } from "../api/client";
 import type {
   CheckpointSession,
@@ -145,15 +146,26 @@ let state: AppState = {
 };
 
 const listeners = new Set<() => void>();
+let notificationTimer: ReturnType<typeof setTimeout> | undefined;
+
+function notifyListeners(): void {
+  for (const listener of [...listeners]) listener();
+}
 
 export function getState(): AppState {
   return state;
 }
 
-export function setState(patch: Partial<AppState> | ((s: AppState) => Partial<AppState>)): void {
+export function setState(patch: Partial<AppState> | ((s: AppState) => Partial<AppState>), immediate = true): void {
   const p = typeof patch === "function" ? patch(state) : patch;
   state = { ...state, ...p };
-  for (const l of [...listeners]) l();
+  if (immediate) notifyListeners();
+  else if (notificationTimer === undefined) {
+    notificationTimer = setTimeout(() => {
+      notificationTimer = undefined;
+      notifyListeners();
+    }, 16);
+  }
 }
 
 function subscribe(listener: () => void): () => void {
@@ -232,15 +244,29 @@ function applyTheme(theme: Theme) {
   writeLocal("modsync.theme", theme);
 }
 
+let initialization: Promise<void> | undefined;
+
 export const actions = {
-  async init(): Promise<void> {
+  init(): Promise<void> {
+    return initialization ??= actions.initialize();
+  },
+
+  async initialize(): Promise<void> {
     applyTheme(state.theme);
     api.connect((connection) => setState({ connection }));
     api.events.on(handleEvent);
     try {
-      const [health, settings, file] = await Promise.all([api.health().catch(() => null), api.getSettings(), api.getFile().catch(() => null)]);
-      const spoilerFree = readLocal<boolean | null>("modsync.spoilerFree", null) ?? settings.spoilerFree;
-      const theme = readLocal<Theme | null>("modsync.theme", null) ?? settings.theme ?? "dark";
+      const [health, savedSettings, file] = await Promise.all([api.health().catch(() => null), api.getSettings(), api.getFile().catch(() => null)]);
+      let spoilerFree = readLocal<boolean | null>("modsync.spoilerFree", null) ?? savedSettings.spoilerFree;
+      const theme = readLocal<Theme | null>("modsync.theme", null) ?? savedSettings.theme ?? "dark";
+      let settings = savedSettings;
+      if (spoilerFree !== savedSettings.spoilerFree) {
+        try {
+          settings = await api.updateSettings({ spoilerFree });
+        } catch {
+          spoilerFree = savedSettings.spoilerFree;
+        }
+      }
       applyTheme(theme);
       setState({
         settings,
@@ -274,15 +300,17 @@ export const actions = {
   setSpoilerFree(spoilerFree: boolean) {
     writeLocal("modsync.spoilerFree", spoilerFree);
     setState({ spoilerFree, report: null });
-    void api
-      .updateSettings({ spoilerFree })
-      .then(() => actions.refreshSelection())
-      .catch((e) => reportError(e));
+    void actions.updateSettings({ spoilerFree }).then(async () => {
+      const saved = state.settings?.spoilerFree ?? spoilerFree;
+      setState({ spoilerFree: saved });
+      writeLocal("modsync.spoilerFree", saved);
+      await actions.refreshSelection();
+    });
   },
 
   setMode(mode: Mode) {
     window.location.hash = mode === "editor" ? "#editor" : "";
-    setState({ mode, draft: mode === "editor" ? state.file : state.draft });
+    setState({ mode, draft: state.draft ?? state.file });
   },
 
   setStep(step: number) {
@@ -290,6 +318,7 @@ export const actions = {
   },
 
   async updateSettings(patch: Partial<UserSettings>): Promise<void> {
+    const previous = state.settings;
     setState((s) => ({ settings: s.settings ? { ...s.settings, ...patch } : s.settings, report: null }));
     try {
       const settings = await api.updateSettings(patch);
@@ -297,6 +326,11 @@ export const actions = {
       if (patch.kotorDirectory !== undefined) void actions.detectGame(patch.kotorDirectory);
       if (patch.platform !== undefined || patch.compatibilityLevel !== undefined) await actions.refreshSelection();
     } catch (err) {
+      try {
+        setState({ settings: await api.getSettings() });
+      } catch {
+        setState({ settings: previous });
+      }
       reportError(err, "Saving settings failed");
     }
   },
@@ -429,9 +463,11 @@ export const actions = {
   async answerPrompt(answer: { choiceId?: string; accepted?: boolean }): Promise<void> {
     const prompt = state.install.pendingPrompt;
     if (!prompt) return;
-    setState((s) => ({ install: { ...s.install, pendingPrompt: undefined } }));
     try {
       await api.answerPrompt({ promptId: prompt.id, ...answer });
+      setState((s) => s.install.pendingPrompt?.id === prompt.id
+        ? { install: { ...s.install, pendingPrompt: undefined } }
+        : {});
     } catch (err) {
       reportError(err, "Answering the prompt failed");
     }
@@ -444,11 +480,17 @@ export const actions = {
         install: {
           ...s.install,
           running: status.running,
+          phase: status.phase ?? s.install.phase,
+          order: status.order ?? s.install.order,
+          total: status.order?.length ?? s.install.total,
           currentMod: status.currentMod ?? s.install.currentMod,
           summary: status.summary ?? s.install.summary,
-          pendingPrompt: status.pendingPrompt ?? s.install.pendingPrompt,
+          pendingPrompt: status.pendingPrompt,
         },
       }));
+      if (status.running) {
+        goTo(status.phase === "widescreen" ? "WidescreenInstalling" : "Installing");
+      }
     } catch {
       /* server may not be there yet */
     }
@@ -606,7 +648,7 @@ function handleEvent({ seq, event }: EventEnvelope): void {
     }
     inst.perMod = perMod;
     return { install: inst };
-  });
+  }, false);
 }
 
 function countInstructions(s: AppState, guid: Guid): number {
@@ -657,6 +699,6 @@ function handleDownloadEvent(e: Extract<EventEnvelope["event"], { type: `downloa
     if (idx >= 0) list[idx] = cur;
     else list.push(cur);
     return { downloads: list };
-  });
+  }, false);
   if (e.type === "download-finished") void actions.refreshFile();
 }

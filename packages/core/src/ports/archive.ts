@@ -12,6 +12,12 @@ export interface ArchiveEntry {
   size: number;
 }
 
+export interface ArchiveExtractOptions {
+  /** Called before destination directories/files are created or written. */
+  beforeWrite?: (absolutePath: string, entry?: ArchiveEntry) => void | Promise<void>;
+  signal?: AbortSignal;
+}
+
 export interface ArchiveReader {
   readonly format: ArchiveFormat;
   readonly archivePath: string;
@@ -20,7 +26,7 @@ export interface ArchiveReader {
    * Extract every entry (or those matching the filter) into destDir,
    * preserving relative paths. Returns the absolute paths written.
    */
-  extract(destDir: string, filter?: (entry: ArchiveEntry) => boolean): Promise<string[]>;
+  extract(destDir: string, filter?: (entry: ArchiveEntry) => boolean, options?: ArchiveExtractOptions): Promise<string[]>;
   /** Read one entry fully into memory. */
   readEntry(entryPath: string): Promise<Uint8Array>;
   close(): Promise<void>;

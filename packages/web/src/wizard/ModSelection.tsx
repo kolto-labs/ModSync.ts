@@ -20,7 +20,7 @@ function visibleMods(s: AppState, phase: "base" | "widescreen"): ModComponent[] 
 /** Why a mod can't be ticked right now (undefined = it can). */
 function disabledReason(s: AppState, m: ModComponent): string | undefined {
   if (m.aspyrOnly && s.settings?.platform !== "Mobile") return "Only for the Aspyr build (choose the Aspyr platform on the notice page)";
-  if (!m.isSelected && s.settings?.compatibilityLevel !== "Untested") {
+  if (!m.isSelected && (s.settings?.compatibilityLevel ?? "Compatible") === "Compatible") {
     const selected = new Set(s.file?.mods.filter((x) => x.isSelected).map((x) => x.guid));
     const partner = m.untestedWith.find((u) => selected.has(u)) ?? s.file?.mods.find((x) => x.isSelected && x.untestedWith.includes(m.guid))?.guid;
     if (partner) return `Untested together with ${modName(s, partner)}. Set the compatibility level to "Untested" to allow it.`;

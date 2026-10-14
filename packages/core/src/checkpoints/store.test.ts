@@ -5,6 +5,7 @@ import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { DirEntry, FileStat, FileSystemPort } from "../ports/filesystem.js";
+import { RealFileSystem } from "../fs/realFileSystem.js";
 import { CheckpointStore, CheckpointError, type CheckpointManifest, type CheckpointState } from "./store.js";
 
 /** Minimal FileSystemPort over node:fs for tests (RealFileSystem is written elsewhere). */
@@ -311,6 +312,28 @@ describe("CheckpointStore", () => {
     expect(await readFile(late, "utf8")).toBe("modded");
   });
 
+  it("records recursively deleted directories and reopens sessions with their original anchor interval", async () => {
+    const e = await makeEnv(2);
+    const path = join(e.game, "Override/pack/a.txt");
+    await e.fs.mkdirp(dirname(path));
+    await writeFile(path, "original");
+    const session = await e.store.startSession("directory");
+    const directory = dirname(path);
+    await e.store.beforeTouch(session, [directory]);
+    await e.fs.remove(directory);
+    const deleted = await e.store.create(session, { label: "delete", touched: [directory] });
+    expect((await e.store.getState(session.id, deleted.id)).get("Override/pack/a.txt")).toBeUndefined();
+    await e.store.restore(session.id, session.checkpoints[0].id);
+    expect(await readFile(path, "utf8")).toBe("original");
+    await e.store.restore(session.id, deleted.id);
+    expect(await e.fs.exists(path)).toBe(false);
+    const reopened = new CheckpointStore({ rootDir: e.store.rootDir, kotorDirectory: e.game, fs: e.fs, anchorInterval: 10 });
+    await writeFile(join(e.game, "other.txt"), "second");
+    const anchor = await reopened.create(session, { label: "second", touched: [join(e.game, "other.txt")] });
+    expect(anchor.isAnchor).toBe(true);
+    expect((await reopened.getState(session.id, anchor.id)).get("other.txt")).toBe(sha1("second"));
+  });
+
   it("delete removes the session and gc drops unreferenced blobs", async () => {
     const { store, game, root } = env;
     await writeFile(join(game, "a.txt"), "keep");
@@ -329,6 +352,79 @@ describe("CheckpointStore", () => {
     const blobs = await readdir(join(root, "store", "cas"), { recursive: true });
     expect(blobs.map((b) => basename(b)).filter((b) => b.length === 40)).toEqual([sha1("only-in-s1")]);
     await expect(store.getSession(s1.id)).rejects.toBeInstanceOf(CheckpointError);
+  });
+
+  it("rejects unsafe session IDs and manifest paths before touching game files", async () => {
+    const { store, game, root } = env;
+    await expect(store.delete("../..")).rejects.toBeInstanceOf(CheckpointError);
+    const path = join(game, "a.txt");
+    await writeFile(path, "original");
+    const session = await store.startSession("safe");
+    await store.beforeTouch(session, [path]);
+    await writeFile(path, "installed");
+    await store.create(session, { label: "step", touched: [path] });
+    const manifestPath = join(root, "store/sessions", session.id, "0.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.entries.push({ path: "../escaped.txt" });
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(store.restore(session.id, session.checkpoints[0].id)).rejects.toBeInstanceOf(CheckpointError);
+    expect(await readFile(path, "utf8")).toBe("installed");
+  });
+
+  it("preflights all blobs so corruption cannot partially restore files", async () => {
+    const { store, game, root } = env;
+    const a = join(game, "a.txt");
+    const b = join(game, "b.txt");
+    await writeFile(a, "first");
+    await writeFile(b, "second");
+    const session = await store.startSession("integrity");
+    await store.beforeTouch(session, [a, b]);
+    await writeFile(a, "installed-a");
+    await writeFile(b, "installed-b");
+    await store.create(session, { label: "step", touched: [a, b] });
+    const hash = sha1("second");
+    await writeFile(join(root, "store/cas", hash.slice(0, 2), hash), "corrupt");
+    await expect(store.restore(session.id, session.checkpoints[0].id)).rejects.toThrow("integrity");
+    expect(await readFile(a, "utf8")).toBe("installed-a");
+    expect(await readFile(b, "utf8")).toBe("installed-b");
+  });
+
+  it("refuses destinations redirected outside the game by symlinks", async () => {
+    if (process.platform === "win32") return;
+    const { game, root } = env;
+    const fs = new RealFileSystem();
+    const store = new CheckpointStore({ rootDir: join(root, "secure-store"), kotorDirectory: game, fs });
+    const path = join(game, "Override/a.txt");
+    await writeFile(path, "original");
+    const session = await store.startSession("symlink");
+    await store.beforeTouch(session, [path]);
+    await writeFile(path, "installed");
+    await store.create(session, { label: "step", touched: [path] });
+    await nfs.rm(join(game, "Override"), { recursive: true });
+    const outside = join(root, "outside");
+    await nfs.mkdir(outside);
+    await writeFile(join(outside, "a.txt"), "external");
+    await nfs.symlink(outside, join(game, "Override"));
+    await expect(store.restore(session.id, session.checkpoints[0].id)).rejects.toThrow("escapes");
+    expect(await readFile(join(outside, "a.txt"), "utf8")).toBe("external");
+  });
+
+  it("refuses a dangling symlink that would redirect a restored file outside the game", async () => {
+    if (process.platform === "win32") return;
+    const { game, root } = env;
+    const fs = new RealFileSystem();
+    const store = new CheckpointStore({ rootDir: join(root, "dangling-store"), kotorDirectory: game, fs });
+    const path = join(game, "Override/a.txt");
+    await writeFile(path, "original");
+    const session = await store.startSession("dangling");
+    await store.beforeTouch(session, [path]);
+    await writeFile(path, "installed");
+    await store.create(session, { label: "step", touched: [path] });
+    await nfs.rm(path);
+    const outside = join(root, "outside-missing.txt");
+    await nfs.symlink(outside, path);
+    await expect(store.restore(session.id, session.checkpoints[0].id)).rejects.toBeInstanceOf(CheckpointError);
+    expect(await fs.exists(outside)).toBe(false);
   });
 
   it("requires a FileSystemPort and handles backslash roots", () => {

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -40,6 +40,19 @@ afterEach(async () => {
 });
 
 describe("RealFileSystem", () => {
+  it("walk rejects symbolic links pointing outside its root", async () => {
+    await symlink(`${root}/Empty`, `${root}/Mods/outside`, "dir");
+    await expect(fs.walk(`${root}/Mods`)).rejects.toThrow(/outside root/);
+  });
+
+  it("walk terminates cycles while retaining internal linked directories", async () => {
+    await symlink(`${root}/Mods`, `${root}/Mods/Sub Dir/cycle`, "dir");
+    await symlink(`${root}/Mods/Sub Dir`, `${root}/Mods/linked`, "dir");
+    const files = await fs.walk(`${root}/Mods`);
+    expect(files).toHaveLength(2);
+    expect(files.some((file) => file.endsWith("beta.txt"))).toBe(true);
+  });
+
   it("is not virtual", () => {
     expect(fs.isVirtual).toBe(false);
   });

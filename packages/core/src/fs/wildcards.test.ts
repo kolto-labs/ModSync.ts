@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -41,6 +41,14 @@ describe("splitWildcardPrefix", () => {
 });
 
 describe("resolveWildcards", () => {
+  it("terminates recursive wildcard traversal through symbolic-link cycles", async () => {
+    const dir = `${root}/Cycle`;
+    await mkdir(dir);
+    await writeFile(`${dir}/file.txt`, "safe");
+    await symlink(dir, `${dir}/again`, "dir");
+    expect(await resolveWildcards(fs, `${dir}/**/*.txt`)).toEqual([`${dir}/file.txt`]);
+  });
+
   it("returns the case-resolved path for non-wildcard input, or []", async () => {
     expect(await resolveWildcards(fs, `${root}/mods/bar/BAR.zip`)).toEqual([`${root}/Mods/Bar/bar.ZIP`]);
     expect(await resolveWildcards(fs, `${root}/mods/missing.zip`)).toEqual([]);

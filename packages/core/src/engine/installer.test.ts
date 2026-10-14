@@ -102,12 +102,28 @@ describe("Installer", () => {
     expect(telemetry.events().every((e) => e.success)).toBe(true);
   });
 
+  it("simulates Extract then Move against virtual files without changing either content root", async () => {
+    await writeZip(`${sb.mods}/Dry.zip`, { "Override/a.txt": "new" });
+    await writeText(`${sb.kotor}/Override/a.txt`, "original");
+    const installer = new Installer(file([mod(1, { instructions: [
+      instr("Extract", { source: ["<<modDirectory>>/Dry.zip"] }),
+      instr("Move", { source: ["<<modDirectory>>/Dry/Override/*"], destination: "<<kotorDirectory>>/Override" }),
+    ] })]), sb.settings);
+    const summary = await installer.run({ dryRun: true });
+    expect(summary.succeeded).toBe(1);
+    expect(summary.failed).toBe(0);
+    expect(summary.mods[0].instructionResults.map((result) => result.code)).toEqual(["Success", "Success"]);
+    expect(await readFile(`${sb.kotor}/Override/a.txt`, "utf8")).toBe("original");
+    expect(await new RealFileSystem().exists(`${sb.mods}/Dry`)).toBe(false);
+    expect((await readdir(sb.mods)).sort()).toEqual(["Dry.zip"]);
+  });
+
   it("fails fast on constraint errors and skips mods whose runtime dependencies are unknown", async () => {
     const bad = file([mod(1, { dependencies: [G(2)] }), mod(2, { isSelected: false })]);
     const installer = new Installer(bad, sb.settings);
     const events = collect(installer);
     const summary = await installer.run();
-    expect(events.map((e) => e.type)).toEqual(["install-error"]);
+    expect(events.map((e) => e.type)).toEqual(["install-error", "install-finished"]);
     expect(summary.mods).toEqual([]);
 
     const skip = file([mod(1, { dependencies: [G(99)], instructions: [instr("Delete", { source: ["<<kotorDirectory>>/x"] })] }), mod(2)]);
@@ -120,7 +136,7 @@ describe("Installer", () => {
     expect(events2.filter((e) => e.type === "mod-started")).toHaveLength(1);
   });
 
-  it("marks a mod Failed on the first failure and continues with the next mod", async () => {
+  it("stops the guide at the first failed mod without executing later mods", async () => {
     const f = file([
       mod(1, {
         instructions: [
@@ -133,9 +149,9 @@ describe("Installer", () => {
     const installer = new Installer(f, sb.settings);
     const summary = await installer.run();
     expect(summary.failed).toBe(1);
-    expect(summary.succeeded).toBe(1);
+    expect(summary.succeeded).toBe(0);
+    expect(summary.mods).toHaveLength(1);
     expect(summary.mods[0].instructionResults.map((r) => r.code)).toEqual(["FileNotFoundPre"]);
-    expect(summary.mods[1].state).toBe("Installed");
   });
 
   it("filters by phase and by modGuids", async () => {
@@ -168,9 +184,9 @@ describe("Installer", () => {
 
   it("cancels a running external program and stops before the next mod", async () => {
     if (process.platform === "win32") return;
-    const { mkdir, symlink } = await import("node:fs/promises");
+    const { mkdir, copyFile } = await import("node:fs/promises");
     await mkdir(`${sb.mods}/tool`, { recursive: true });
-    await symlink(process.execPath, `${sb.mods}/tool/node`);
+    await copyFile(process.execPath, `${sb.mods}/tool/node`);
     const f = file([
       mod(1, { instructions: [instr("Execute", { source: ["<<modDirectory>>/tool/node"], arguments: `-e "setTimeout(() => {}, 20000)"` })] }),
       mod(2, { instructions: [instr("Delete", { source: ["<<kotorDirectory>>/x"] })] }),
@@ -224,6 +240,129 @@ describe("Installer", () => {
     expect(calls[3].paths).toContain(`${sb.kotor}/Override/alpha.tpc`);
     expect(events.filter((e) => e.type === "checkpoint-created")).toHaveLength(2);
     expect(summary.mods[0].instructionResults.map((r) => r.checkpointId)).toEqual(["s1-1", "s1-2"]);
+  });
+
+  it("reports preflight failure through a failed summary and terminal events", async () => {
+    const installer = new Installer(file([mod(1, { dependencies: [G(2)] }), mod(2, { isSelected: false })]), sb.settings);
+    const events = collect(installer);
+    const summary = await installer.run();
+    expect(summary.failed).toBeGreaterThan(0);
+    expect(summary.succeeded).toBe(0);
+    expect(events.map((event) => event.type)).toContain("install-error");
+    expect(events.at(-1)?.type).toBe("install-finished");
+    expect(installer.running).toBe(false);
+  });
+
+  it("refuses to install when the requested checkpoint session cannot be created", async () => {
+    const path = `${sb.kotor}/Override/keep.txt`;
+    await writeText(path, "original");
+    const installer = new Installer(file([mod(1, { instructions: [instr("Delete", { source: ["<<kotorDirectory>>/Override/keep.txt"] })] })]), sb.settings, {
+      checkpoints: {
+        startSession: async () => { throw new Error("disk full"); },
+        beforeTouch: async () => { throw new Error("unexpected beforeTouch"); },
+        create: async () => { throw new Error("unexpected create"); },
+      },
+    });
+    const events = collect(installer);
+    expect((await installer.run()).failed).toBe(1);
+    expect(await readFile(path, "utf8")).toBe("original");
+    expect(events.some((event) => event.type === "install-error" && event.message.includes("session creation failed"))).toBe(true);
+    expect(events.at(-1)?.type).toBe("install-finished");
+  });
+
+  it("stops subsequent instructions and mods when checkpoint persistence fails", async () => {
+    const first = `${sb.kotor}/Override/first.txt`;
+    const second = `${sb.kotor}/Override/second.txt`;
+    const third = `${sb.kotor}/Override/third.txt`;
+    for (const path of [first, second, third]) await writeText(path, "original");
+    const session: CheckpointSession = { id: "session", kotorDirectory: sb.kotor, createdAt: "", anchorInterval: 10, checkpoints: [] };
+    const installer = new Installer(file([
+      mod(1, { instructions: [instr("Delete", { source: ["<<kotorDirectory>>/Override/first.txt"] }), instr("Delete", { source: ["<<kotorDirectory>>/Override/second.txt"] })] }),
+      mod(2, { instructions: [instr("Delete", { source: ["<<kotorDirectory>>/Override/third.txt"] })] }),
+    ]), sb.settings, { checkpoints: {
+      startSession: async () => session,
+      beforeTouch: async () => 1,
+      create: async () => { throw new Error("disk full"); },
+    } });
+    const events = collect(installer);
+    const summary = await installer.run();
+    expect(summary.failed).toBe(1);
+    expect(summary.mods).toHaveLength(1);
+    expect(summary.mods[0].instructionResults[0].message).toContain("persistence failed");
+    expect(await new RealFileSystem().exists(first)).toBe(false);
+    expect(await readFile(second, "utf8")).toBe("original");
+    expect(await readFile(third, "utf8")).toBe("original");
+    expect(events.map((event) => event.type)).toContain("install-error");
+    expect(events.at(-1)?.type).toBe("install-finished");
+  });
+
+  it("does not execute an instruction when its checkpoint baseline cannot be captured", async () => {
+    const path = `${sb.kotor}/Override/keep.txt`;
+    await writeText(path, "original");
+    const session: CheckpointSession = { id: "session", kotorDirectory: sb.kotor, createdAt: "", anchorInterval: 10, checkpoints: [] };
+    const installer = new Installer(file([mod(1, { instructions: [instr("Delete", { source: ["<<kotorDirectory>>/Override/keep.txt"] })] })]), sb.settings, {
+      checkpoints: {
+        startSession: async () => session,
+        beforeTouch: async () => { throw new Error("disk full"); },
+        create: async () => { throw new Error("must not create a checkpoint"); },
+      },
+    });
+    const summary = await installer.run();
+    expect(summary.failed).toBe(1);
+    expect(summary.mods[0].instructionResults[0].message).toContain("not executed");
+    expect(await readFile(path, "utf8")).toBe("original");
+  });
+
+  it("restores opaque patcher changes including overwritten, deleted, and new files", async () => {
+    await writeText(`${sb.mods}/patch/tslpatchdata/changes.ini`, "[Settings]");
+    await writeText(`${sb.kotor}/Override/old.txt`, "original");
+    await writeText(`${sb.kotor}/Override/deleted.txt`, "keep");
+    const fs = new RealFileSystem();
+    const store = new CheckpointStore({ rootDir: `${sb.root}/checkpoints`, kotorDirectory: sb.kotor, fs });
+    const installer = new Installer(file([mod(1, { instructions: [instr("Patcher", { source: ["<<modDirectory>>/patch"] })] })]), sb.settings, {
+      fs,
+      checkpoints: store,
+      patcher: { install: async () => {
+        await writeText(`${sb.kotor}/Override/old.txt`, "patched");
+        await fs.remove(`${sb.kotor}/Override/deleted.txt`);
+        await writeText(`${sb.kotor}/Override/new.txt`, "new");
+        return { ok: true, warnings: [], errors: [], filesWritten: [`${sb.kotor}/Override/old.txt`, `${sb.kotor}/Override/new.txt`] };
+      } },
+    });
+    expect((await installer.run()).succeeded).toBe(1);
+    const [session] = await store.list();
+    await store.restore(session.id, session.checkpoints[0].id);
+    expect(await readFile(`${sb.kotor}/Override/old.txt`, "utf8")).toBe("original");
+    expect(await readFile(`${sb.kotor}/Override/deleted.txt`, "utf8")).toBe("keep");
+    expect(await fs.exists(`${sb.kotor}/Override/new.txt`)).toBe(false);
+    await store.restore(session.id, session.checkpoints[1].id);
+    expect(await readFile(`${sb.kotor}/Override/old.txt`, "utf8")).toBe("patched");
+    expect(await fs.exists(`${sb.kotor}/Override/deleted.txt`)).toBe(false);
+    expect(await readFile(`${sb.kotor}/Override/new.txt`, "utf8")).toBe("new");
+  });
+
+  it("can roll back a cancelled extraction including newly created partial files", async () => {
+    await writeZip(`${sb.mods}/Partial.zip`, { "new.txt": "archive value" });
+    const fs = new RealFileSystem();
+    const store = new CheckpointStore({ rootDir: `${sb.root}/checkpoints`, kotorDirectory: sb.kotor, fs });
+    const open = await import("../archive/index.js");
+    const installer = new Installer(file([mod(1, { instructions: [instr("Extract", {
+      source: ["<<modDirectory>>/Partial.zip"], destination: "<<kotorDirectory>>/Override",
+    })] })]), sb.settings, { fs, checkpoints: store, openArchive: async (path, options) => {
+      const reader = await open.openArchive(path, options);
+      reader.extract = async (dest) => {
+        await writeText(`${dest}/new.txt`, "partial");
+        installer.cancel();
+        throw new DOMException("Cancelled", "AbortError");
+      };
+      return reader;
+    } });
+    const summary = await installer.run();
+    expect(summary.failed).toBe(1);
+    expect(await readFile(`${sb.kotor}/Override/new.txt`, "utf8")).toBe("partial");
+    const [session] = await store.list();
+    await store.restore(session.id, session.checkpoints[0].id);
+    expect(await fs.exists(`${sb.kotor}/Override/new.txt`)).toBe(false);
   });
 
   it("works with the real CheckpointStore", async () => {

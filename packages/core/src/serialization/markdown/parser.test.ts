@@ -179,3 +179,73 @@ describe("cross-format", () => {
     expect(file).toEqual(imported);
   });
 });
+
+describe("community guide version fixes and admonitions", () => {
+  it("imports actual Aspyr fix packages before Mod List without importing setup headings", () => {
+    const md = `# KOTOR 2 Full Build
+## Installation Notes
+### Linux Players
+**Description:** General setup instructions, not a mod.
+## CRITICAL: PC Version Differences & Fixes
+Use these fixes only with the Aspyr patch.
+### 3C-FD Patcher
+**Name:** [3C-FD Patcher](https://example.com/3c-fd)
+**Installation Method:** Executable
+### Water Restoration
+**Name:** [Water Restoration](https://example.com/water)
+**Installation Method:** Loose-File Mod
+### Stutter Fix
+**Name:** [Stutter Fix and Force Cage Update](https://example.com/stutter)
+**Installation Method:** Loose-File Mod
+## Mod List
+### TSLRCM
+**Name:** [The Sith Lords Restored Content Mod](https://example.com/tslrcm)
+**Installation Method:** Executable
+## Enhanced Widescreen Support Mods
+### Main Menu Fix
+**Name:** [Main Menu Fix](https://example.com/menu)
+**Installation Method:** Loose-File Mod
+## Misc. Basegame Issues & Fixes
+### Grass
+Change the settings file.
+`;
+    const { file } = parseMarkdownBuild(md, { autoInstructions: false });
+    expect(file.mods.map((mod) => mod.name)).toEqual(["3C-FD Patcher", "Water Restoration", "Stutter Fix", "TSLRCM", "Main Menu Fix"]);
+    expect(file.mods.map((mod) => mod.aspyrOnly)).toEqual([true, true, true, false, false]);
+    expect(file.mods.map((mod) => mod.isWidescreen)).toEqual([false, false, false, false, true]);
+    expect(file.config.beforeModListContent).toContain("Linux Players");
+    expect(file.config.beforeModListContent).not.toContain("Water Restoration");
+    expect(file.config.aspyrSectionContent).toContain("Use these fixes only with the Aspyr patch.");
+    expect(file.config.afterModListContent).toContain("Grass");
+  });
+
+  it("keeps installation and download admonitions out of Masters dependencies", () => {
+    const md = `# KOTOR 1 Build
+## Mod List
+### Master
+**Name:** Master
+### Child
+**Name:** Child
+**Masters:** Master
+:::note
+Download Instructions
+:   Ignore the txi.rar file.
+:::
+:::note
+Installation Instructions
+:   Delete ncommm07.tga, then move remaining files to Override.
+:::
+`;
+    const { file, warnings } = parseMarkdownBuild(md, { autoInstructions: false });
+    expect(file.mods[1].dependencies).toEqual([file.mods[0].guid]);
+    expect(warnings.some((warning) => warning.includes("unresolved dependencies"))).toBe(false);
+    expect(file.mods[1].directions).toContain("Ignore the txi.rar file.");
+    expect(file.mods[1].directions).toContain("Delete ncommm07.tga, then move remaining files to Override.");
+  });
+
+  it("preserves literal underscores in resource-style headings", () => {
+    const { file } = parseMarkdownBuild("# KOTOR 1 Build\n## Mod List\n### N_oldAMH01 HD\n**Name:** N_oldAMH01 HD", { autoInstructions: false });
+    expect(file.mods[0].name).toBe("N_oldAMH01 HD");
+    expect(file.mods[0].guid).toBe(stableGuidForName("N_oldAMH01 HD"));
+  });
+});

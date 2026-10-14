@@ -25,7 +25,7 @@
  */
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { FileSystemPort } from "../ports/filesystem.js";
 import type { CheckpointFileEntry, CheckpointMeta, CheckpointSession, Guid } from "../model/types.js";
 
@@ -146,6 +146,7 @@ export class CheckpointStore {
   }
 
   private sessionDir(sessionId: string): string {
+    if (!/^[a-zA-Z0-9_-]+$/.test(sessionId)) throw new CheckpointError("Invalid checkpoint session ID");
     return join(this.rootDir, "sessions", sessionId);
   }
 
@@ -158,6 +159,7 @@ export class CheckpointStore {
   }
 
   private blobPath(sha1: string): string {
+    if (!/^[a-f0-9]{40}$/.test(sha1)) throw new CheckpointError("Invalid checkpoint blob hash");
     return join(this.casDir, sha1.slice(0, 2), sha1);
   }
 
@@ -173,6 +175,9 @@ export class CheckpointStore {
   }
 
   absolutePath(relative: string): string {
+    if (typeof relative !== "string" || !relative || relative.includes("\\") || relative.includes(":") || relative.includes("\0") || relative.startsWith("/") || relative.split("/").some((part) => !part || part === "." || part === "..")) {
+      throw new CheckpointError("Invalid checkpoint file path");
+    }
     return `${this.kotorDirectory}/${relative}`;
   }
 
@@ -223,7 +228,11 @@ export class CheckpointStore {
 
   async getSession(sessionId: string): Promise<StoredCheckpointSession> {
     try {
-      return await readJson<StoredCheckpointSession>(this.sessionFile(sessionId));
+      const session = await readJson<StoredCheckpointSession>(this.sessionFile(sessionId));
+      if (session.id !== sessionId || typeof session.kotorDirectory !== "string" || !isAbsolute(session.kotorDirectory) || !Number.isSafeInteger(session.anchorInterval) || session.anchorInterval < 1 || !Array.isArray(session.checkpoints) || !session.checkpoints.length || session.checkpoints.some((cp, index) => cp.index !== index || cp.sessionId !== sessionId || cp.id !== `${sessionId}-${index}` || cp.isAnchor !== (index % session.anchorInterval === 0))) {
+        throw new CheckpointError("Invalid checkpoint session metadata");
+      }
+      return session;
     } catch {
       throw new CheckpointError(`Unknown checkpoint session "${sessionId}"`);
     }
@@ -237,7 +246,7 @@ export class CheckpointStore {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       try {
-        out.push(await readJson<StoredCheckpointSession>(join(dir, entry.name, "session.json")));
+        out.push(await this.getSession(entry.name));
       } catch {
         /* skip half-written sessions */
       }
@@ -283,7 +292,16 @@ export class CheckpointStore {
 
   private async readManifest(sessionId: string, index: number): Promise<CheckpointManifest> {
     try {
-      return await readJson<CheckpointManifest>(this.manifestFile(sessionId, index));
+      const manifest = await readJson<CheckpointManifest>(this.manifestFile(sessionId, index));
+      const session = await this.getSession(sessionId);
+      if (manifest.index !== index || manifest.id !== `${sessionId}-${index}` || manifest.isAnchor !== (index % session.anchorInterval === 0) || !Array.isArray(manifest.entries)) throw new CheckpointError("Invalid checkpoint manifest");
+      const seen = new Set<string>();
+      for (const entry of manifest.entries) {
+        this.absolutePath(entry.path);
+        if (seen.has(entry.path) || (entry.sha1 !== undefined && !/^[a-f0-9]{40}$/.test(entry.sha1))) throw new CheckpointError("Invalid checkpoint manifest entry");
+        seen.add(entry.path);
+      }
+      return manifest;
     } catch {
       throw new CheckpointError(`Missing manifest ${index} for session "${sessionId}"`);
     }
@@ -304,7 +322,8 @@ export class CheckpointStore {
     };
     apply(await this.readManifest(sessionId, 0));
     if (index === 0) return state;
-    const anchor = index - (index % this.anchorInterval);
+    const interval = (await this.getSession(sessionId)).anchorInterval;
+    const anchor = index - (index % interval);
     if (anchor > 0) apply(await this.readManifest(sessionId, anchor));
     for (let i = anchor + 1; i <= index; i++) apply(await this.readManifest(sessionId, i));
     return state;
@@ -335,8 +354,11 @@ export class CheckpointStore {
 
   async readBlob(sha1: string): Promise<Uint8Array> {
     try {
-      return new Uint8Array(await readFile(this.blobPath(sha1)));
-    } catch {
+      const data = new Uint8Array(await readFile(this.blobPath(sha1)));
+      if (sha1Hex(data) !== sha1) throw new CheckpointError(`Blob ${sha1} failed integrity verification`);
+      return data;
+    } catch (err) {
+      if (err instanceof CheckpointError) throw err;
       throw new CheckpointError(`Blob ${sha1} is missing from the checkpoint store`);
     }
   }
@@ -356,6 +378,7 @@ export class CheckpointStore {
       const rel = this.relativePath(raw);
       if (!rel) continue;
       const abs = this.absolutePath(rel);
+      await this.assertContained(abs);
       const st = await this.fs.stat(abs);
       if (st?.isDirectory) {
         for (const file of await this.fs.walk(abs)) {
@@ -372,6 +395,7 @@ export class CheckpointStore {
   /** Snapshot the current content of one game file into the CAS. */
   private async capture(rel: string): Promise<{ entry: CheckpointFileEntry; added: number }> {
     const abs = this.absolutePath(rel);
+    await this.assertContained(abs);
     const st = await this.fs.stat(abs);
     if (!st || st.isDirectory) return { entry: { path: rel }, added: 0 };
     const data = await this.fs.readFile(abs);
@@ -429,10 +453,17 @@ export class CheckpointStore {
       const stored = await this.getSession(session.id);
       const prevIndex = stored.checkpoints.length - 1;
       const index = prevIndex + 1;
-      const isAnchor = index % this.anchorInterval === 0;
+      const isAnchor = index % stored.anchorInterval === 0;
 
-      const rels = await this.expandPaths(meta.touched);
       const baseline = await this.readManifest(session.id, 0);
+      const expanded = new Set(await this.expandPaths(meta.touched));
+      // A removed directory cannot be walked anymore. Its previously tracked
+      // children must still be captured as absent in this checkpoint.
+      const touchedRoots = meta.touched.map((path) => this.relativePath(path)).filter((path): path is string => !!path);
+      for (const entry of baseline.entries) {
+        if (touchedRoots.some((root) => entry.path === root || entry.path.startsWith(`${root}/`))) expanded.add(entry.path);
+      }
+      const rels = [...expanded];
       const tracked = new Set(baseline.entries.map((e) => e.path));
       let baselineDirty = false;
       for (const rel of rels) {
@@ -500,17 +531,33 @@ export class CheckpointStore {
    */
   restore(sessionId: string, checkpointId: string, onProgress?: RestoreProgress): Promise<void> {
     return this.withLock(sessionId, async () => {
-      const state = await this.computeState(sessionId, this.findCheckpoint(await this.getSession(sessionId), checkpointId).index);
+      const session = await this.getSession(sessionId);
+      if (resolve(session.kotorDirectory) !== resolve(this.kotorDirectory)) throw new CheckpointError("Checkpoint session belongs to a different game directory");
+      const state = await this.computeState(sessionId, this.findCheckpoint(session, checkpointId).index);
       const paths = [...state.keys()].sort();
+      // Validate every target and every blob before the first game mutation.
+      // Missing/corrupt data must not leave a half-restored installation.
+      const verified = new Set<string>();
+      for (const rel of paths) {
+        await this.assertContained(this.absolutePath(rel));
+        const want = state.get(rel);
+        if (want && !verified.has(want)) {
+          await this.readBlob(want);
+          verified.add(want);
+        }
+        const current = await this.fs.stat(this.absolutePath(rel));
+        if (want && current?.isDirectory) throw new CheckpointError(`Cannot restore file over directory: ${rel}`);
+      }
       const total = paths.length;
       let done = 0;
       onProgress?.(0, total);
       for (const rel of paths) {
+        await this.assertContained(this.absolutePath(rel));
         const want = state.get(rel);
         const abs = this.absolutePath(rel);
         const st = await this.fs.stat(abs);
         if (want === undefined) {
-          if (st) await this.fs.remove(abs);
+          if (st && !st.isDirectory) await this.fs.remove(abs);
         } else {
           const same = st && !st.isDirectory ? (await this.fs.sha1(abs)) === want : false;
           if (!same) {
@@ -523,6 +570,26 @@ export class CheckpointStore {
         onProgress?.(done, total);
       }
     });
+  }
+
+  private async assertContained(path: string): Promise<void> {
+    if (!this.fs.realpath) return;
+    const root = await this.fs.realpath(this.kotorDirectory);
+    let existing = path;
+    while (!(await this.fs.exists(existing))) {
+      if (await this.fs.isSymbolicLink?.(existing)) throw new CheckpointError("Checkpoint destination contains a dangling symbolic link");
+      const parent = dirname(existing);
+      if (parent === existing) throw new CheckpointError("Checkpoint destination has no existing parent");
+      existing = parent;
+    }
+    let canonical: string;
+    try {
+      canonical = await this.fs.realpath(existing);
+    } catch (err) {
+      throw new CheckpointError(`Checkpoint destination cannot be resolved safely: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    const rel = relative(root, canonical);
+    if (isAbsolute(rel) || rel === ".." || rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)) throw new CheckpointError("Checkpoint destination escapes the game directory");
   }
 
   // ---------------------------------------------------------------------

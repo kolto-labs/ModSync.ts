@@ -1,0 +1,45 @@
+name: Synthetic CLI (linux)
+
+on:
+  workflow_dispatch:
+    inputs:
+      game:
+        description: Controlled fixture game target (no real game/mod assets)
+        type: choice
+        options: [both, KOTOR1, KOTOR2]
+        default: both
+
+permissions:
+  contents: read
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout immutable source guide corpus
+        uses: actions/checkout@v4
+        with:
+          repository: kolto-labs/mod-builds
+          ref: 21b2f0499d28ecd4ee2092701dee5792ba5da4b9
+          path: corpus
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Audit guides and run controlled CLI fixtures
+        run: pnpm exec tsx tools/synthetic-modbuild.ts --corpus corpus --output artifacts/synthetic-cli --game "${{ inputs.game }}"
+      - name: Upload audit, CLI logs, output proofs and checkpoints
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-cli-linux
+          path: artifacts/synthetic-cli
+          if-no-files-found: error

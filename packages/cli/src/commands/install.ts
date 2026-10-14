@@ -41,7 +41,10 @@ export function parseChoices(values: string[] | undefined): Map<string, string> 
   for (const raw of values ?? []) {
     const eq = raw.indexOf("=");
     if (eq <= 0) throw new CliError(`--choice expects <instructionGuid>=<choiceId>, got "${raw}"`);
-    out.set(raw.slice(0, eq).trim().replace(/^\{|\}$/g, "").toLowerCase(), raw.slice(eq + 1).trim());
+    const guid = raw.slice(0, eq).trim().replace(/^\{|\}$/g, "").toLowerCase();
+    const choice = raw.slice(eq + 1).trim();
+    if (!guid || !choice) throw new CliError("--choice requires a non-empty instruction GUID and answer");
+    out.set(guid, choice);
   }
   return out;
 }
@@ -54,7 +57,10 @@ export async function answerPromptInteractively(
   const scripted = prompt.instructionGuid ? opts.choices.get(prompt.instructionGuid.toLowerCase()) : undefined;
   if (scripted !== undefined) {
     const byId = prompt.choices.find((c) => c.id === scripted || c.label.toLowerCase() === scripted.toLowerCase());
-    if (prompt.kind === "confirm") return { promptId: prompt.id, accepted: !/^(n|no|false|0)$/i.test(scripted) };
+    if (prompt.kind === "confirm") {
+      if (!/^(y|yes|true|1|n|no|false|0)$/i.test(scripted)) throw new CliError("--choice: confirmation answer must be yes or no");
+      return { promptId: prompt.id, accepted: /^(y|yes|true|1)$/i.test(scripted) };
+    }
     if (byId) return { promptId: prompt.id, choiceId: byId.id, accepted: true };
     if (prompt.allowNone && /^(none|skip)$/i.test(scripted)) return { promptId: prompt.id, accepted: true };
     throw new CliError(`--choice: "${scripted}" is not a valid choice for prompt "${prompt.title}" (${prompt.choices.map((c) => c.id).join(", ")})`);
@@ -145,6 +151,9 @@ export async function runInstall(filePath: string, flags: InstallFlags, run: Run
 
   const names = new Map(file.mods.map((m) => [m.guid, m.name]));
   let summary: InstallSummary | undefined;
+  let cancelled = false;
+  let promptFailed = false;
+  let installError = false;
   let modIndex = 0;
   let modTotal = plan.mods.length;
   const stepCounter = new Map<string, number>();
@@ -182,13 +191,16 @@ export async function runInstall(filePath: string, flags: InstallFlags, run: Run
           .then((answer) => installer.answerPrompt(answer))
           .catch((err) => {
             out(`prompt failed: ${err instanceof Error ? err.message : String(err)}`);
+            promptFailed = true;
             installer.cancel();
           });
         break;
       case "install-error":
+        installError = true;
         out(`ERROR: ${e.message}`);
         break;
       case "install-cancelled":
+        cancelled = true;
         out("Cancelled.");
         break;
       case "install-finished":
@@ -201,6 +213,7 @@ export async function runInstall(filePath: string, flags: InstallFlags, run: Run
   installer.on("event", onEvent);
 
   const onSigint = (): void => {
+    cancelled = true;
     out("\nCancelling...");
     installer.cancel();
   };
@@ -211,6 +224,7 @@ export async function runInstall(filePath: string, flags: InstallFlags, run: Run
     process.off("SIGINT", onSigint);
     rl?.close();
     installer.off("event", onEvent);
+    await logger.flush();
   }
 
   if (flags.json) {
@@ -221,7 +235,7 @@ export async function runInstall(filePath: string, flags: InstallFlags, run: Run
     for (const m of summary.mods) if (m.state === "Failed") out(`  failed: ${names.get(m.modGuid) ?? m.modGuid}`);
     if (summary.checkpointSessionId) out(`Checkpoint session: ${summary.checkpointSessionId}`);
   }
-  return summary.failed > 0 ? 1 : 0;
+  return promptFailed || installError ? 1 : cancelled ? 130 : summary.failed > 0 ? 1 : 0;
 }
 
 function collect(value: string, previous: string[] = []): string[] {

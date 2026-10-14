@@ -71,7 +71,7 @@ export async function createModSyncServer(opts: ModSyncServerOptions = {}): Prom
     logger: opts.logger ?? false,
     bodyLimit: BODY_LIMIT,
     // Directory paths and GUIDs in params; keep the raw value.
-    ignoreTrailingSlash: true,
+    routerOptions: { ignoreTrailingSlash: true },
   });
   app.decorate("modsyncState", state);
 

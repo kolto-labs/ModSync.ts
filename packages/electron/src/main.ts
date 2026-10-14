@@ -17,11 +17,13 @@ import { IPC } from "./bridge.js";
 import { electronBridge, isSafeExternalUrl, pickFile, registerIpcHandlers } from "./ipc.js";
 
 const NXM_SCHEME = "nxm";
-const GITHUB_URL = "https://github.com/th3w1zard1/KOTORModSync";
+const GITHUB_URL = "https://github.com/bodencrouch/ModSync.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Built web bundle: `packages/web/dist`, resolved relative to `packages/electron/dist`. */
-const STATIC_DIR = path.resolve(__dirname, "../../web/dist");
+const STATIC_DIR = app.isPackaged
+  ? path.join(app.getAppPath(), "web")
+  : path.resolve(__dirname, "../../web/dist");
 const PRELOAD = path.join(__dirname, "preload.cjs");
 
 // ---------------------------------------------------------------------------
@@ -320,6 +322,7 @@ async function startServer(): Promise<string> {
     token,
     staticDir: STATIC_DIR,
     electronBridge,
+    settingsPath: process.env.MODSYNC_SETTINGS_PATH,
   });
   return server.listen(0, "127.0.0.1");
 }
@@ -369,6 +372,7 @@ if (hasLock) {
 let quitting = false;
 
 app.on("window-all-closed", () => {
+  if (quitting) return;
   if (process.platform === "darwin") return;
   void stopServer().finally(() => app.quit());
 });
@@ -378,5 +382,7 @@ app.on("before-quit", (event) => {
   // Give the server a chance to shut down cleanly, then really quit.
   event.preventDefault();
   quitting = true;
+  // Close renderer WebSockets and HTTP keep-alives before awaiting the local server.
+  for (const win of BrowserWindow.getAllWindows()) win.destroy();
   void stopServer().finally(() => app.quit());
 });

@@ -46,7 +46,7 @@ export function parseInstructionFileDetailed(text: string): ParsedInstructionFil
   try {
     root = parseToml(text.replace(/^﻿/, ""));
   } catch (err) {
-    throw new Error(`Invalid instruction file: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Invalid instruction file: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
   }
   if (!isRecord(root)) throw new Error("Invalid instruction file: root is not a table");
 

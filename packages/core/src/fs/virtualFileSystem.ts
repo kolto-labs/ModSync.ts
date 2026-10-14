@@ -110,6 +110,19 @@ export class VirtualFileSystem implements FileSystemPort {
     }
   }
 
+  async isSymbolicLink(path: string): Promise<boolean> {
+    return this.base.isSymbolicLink ? this.base.isSymbolicLink(path) : false;
+  }
+
+  async realpath(path: string): Promise<string> {
+    const norm = normalizePath(path);
+    if (!this.base.realpath) return (await this.resolveCase(norm)) ?? norm;
+    if (await this.base.exists(norm)) return this.base.realpath(norm);
+    const parent = parentPath(norm);
+    if (parent === norm) return norm;
+    return joinPath(await this.realpath(parent), baseName(norm));
+  }
+
   async exists(path: string): Promise<boolean> {
     return (await this.lookup(path)) !== undefined;
   }

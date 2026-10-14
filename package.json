@@ -5,13 +5,19 @@
   "description": "ModSync: a multi-mod instruction builder and installer for KOTOR 1 and 2 (TypeScript, hybrid Electron / web server)",
   "license": "GPL-3.0-or-later",
   "packageManager": "pnpm@10.33.0",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
   "scripts": {
     "build": "pnpm -r --filter './packages/**' run build",
-    "typecheck": "pnpm -r --filter './packages/**' run typecheck",
+    "typecheck": "pnpm -r --filter './packages/**' run typecheck && tsc -p tsconfig.tools.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint . --ext .ts,.tsx",
+    "lint": "eslint . --ext .ts,.tsx,.cts --max-warnings 0",
+    "check": "pnpm build && pnpm typecheck && pnpm lint && pnpm test",
+    "package:desktop": "pnpm build && pnpm --filter @modsync/electron package",
+    "simulation:cli": "tsx tools/synthetic-modbuild.ts",
+    "simulation:gui": "tsx tools/electron-clickthrough.ts",
     "dev:server": "pnpm --filter @modsync/server run dev",
     "dev:web": "pnpm --filter @modsync/web run dev",
     "dev:electron": "pnpm --filter @modsync/electron run dev",
@@ -19,9 +25,14 @@
     "modsync": "pnpm --filter @modsync/cli run modsync"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "playwright": "^1.64.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0",
-    "tsx": "^4.19.0"
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^3.0.0"
   }
 }

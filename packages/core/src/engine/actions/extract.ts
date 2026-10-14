@@ -5,8 +5,9 @@
  */
 
 import { ArchiveError } from "../../archive/common.js";
+import { SandboxFileSystem } from "../../fs/sandboxFileSystem.js";
 import { VirtualFileSystem } from "../../fs/virtualFileSystem.js";
-import { baseName, joinPath, parentPath } from "../../fs/paths.js";
+import { baseName, joinPath, parentPath, PathEscapeError } from "../../fs/paths.js";
 import type { Instruction, InstructionResult, ModComponent, ModOption } from "../../model/types.js";
 import type { ArchiveReader } from "../../ports/archive.js";
 import type { InstallContext } from "../context.js";
@@ -55,7 +56,7 @@ export async function executeExtract(
           if (ctx.dryRun) {
             const entries = await reader.list();
             run.touch(dest);
-            if (ctx.fs instanceof VirtualFileSystem) {
+            if (ctx.fs.isVirtual && (ctx.fs instanceof VirtualFileSystem || ctx.fs instanceof SandboxFileSystem)) {
               await ctx.fs.mkdirp(dest);
               const files = entries.filter((e) => !e.isDirectory).map((e) => ({ path: joinPath(dest, e.path), size: e.size }));
               for (const e of entries) if (e.isDirectory) await ctx.fs.mkdirp(joinPath(dest, e.path));
@@ -65,12 +66,37 @@ export async function executeExtract(
             ctx.logger.info(`dry run: would extract "${archive}" (${entries.length} entries) to "${dest}"`);
           } else {
             await ctx.fs.mkdirp(dest);
-            const written = await reader.extract(dest);
+            const entries = await reader.list();
+            // Validate the entire destination set before any archive bytes are written.
+            if (ctx.fs instanceof SandboxFileSystem) {
+              for (const entry of entries) await ctx.fs.assertPath(joinPath(dest, entry.path));
+            }
+            let written: string[];
+            if (ctx.fs.isVirtual) {
+              // An explicitly injected writable VFS must never be bypassed by
+              // a native adapter. Dry-run above uses metadata without inflation.
+              written = [];
+              for (const entry of entries) {
+                checkCancelled(ctx);
+                const target = joinPath(dest, entry.path);
+                if (entry.isDirectory) await ctx.fs.mkdirp(target);
+                else { await ctx.fs.writeFile(target, await reader.readEntry(entry.path)); written.push(target); }
+              }
+            } else {
+              written = await reader.extract(dest, undefined, {
+                signal: ctx.signal,
+                beforeWrite: async (target) => {
+                  checkCancelled(ctx);
+                  if (ctx.fs instanceof SandboxFileSystem) await ctx.fs.assertPath(target);
+                  run.touch(target);
+                },
+              });
+            }
             run.touch(dest, ...written);
             ctx.logger.info(`extracted "${archive}" (${written.length} files) to "${dest}"`);
           }
         } catch (err) {
-          if (err instanceof ActionError) throw err;
+          if (err instanceof ActionError || err instanceof PathEscapeError) throw err;
           const message = err instanceof Error ? err.message : String(err);
           if (err instanceof ArchiveError || /archive|zip|rar|7z/i.test(message)) {
             throw new ActionError("ArchiveError", `extracting "${archive}" failed: ${message}`);

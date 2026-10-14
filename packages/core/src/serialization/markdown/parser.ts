@@ -107,7 +107,7 @@ function parseLabels(lines: string[]): { leading: string[]; entries: LabelEntry[
   const leading: string[] = [];
   const entries: LabelEntry[] = [];
   let current: LabelEntry | undefined;
-  for (const line of lines) {
+  for (const line of normalizeAdmonitions(lines)) {
     const m = isLabelLine(line);
     if (m) {
       const label = (m[1] ?? m[3]).trim();
@@ -120,6 +120,27 @@ function parseLabels(lines: string[]): { leading: string[]; entries: LabelEntry[
   return { leading, entries };
 }
 
+/** Convert community-guide admonitions into field boundaries before parsing metadata. */
+function normalizeAdmonitions(lines: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*:::(?:note|warning|tip|danger|info)\s*$/i.test(lines[i])) {
+      out.push(lines[i]);
+      continue;
+    }
+    let titleIndex = i + 1;
+    while (titleIndex < lines.length && !lines[titleIndex].trim()) titleIndex++;
+    const title = lines[titleIndex]?.trim();
+    if (!title || title.startsWith(":")) { out.push(lines[i]); continue; }
+    const end = lines.findIndex((line, index) => index > titleIndex && /^\s*:::\s*$/.test(line));
+    if (end < 0) { out.push(lines[i]); continue; }
+    out.push(`**${title.replace(/\*/g, "")}:**`);
+    for (const line of lines.slice(titleIndex + 1, end)) out.push(line.replace(/^\s*:\s{0,3}/, ""));
+    i = end;
+  }
+  return out;
+}
+
 function trimLines(lines: string[]): string {
   return lines.join("\n").replace(/^\s*\n/, "").replace(/\s+$/, "");
 }
@@ -127,7 +148,8 @@ function trimLines(lines: string[]): string {
 function stripMarkdown(text: string): string {
   return text
     .replace(LINK_RE, "$1")
-    .replace(/[*_`]/g, "")
+    .replace(/(\*\*|__|\*|_)(.*?)\1/g, "$2")
+    .replace(/`/g, "")
     .trim();
 }
 
@@ -484,10 +506,18 @@ export function parseMarkdownBuild(md: string, profile: MarkdownImportProfile = 
   }
   if (listStart < 0) listStart = merged.length;
 
+  // Version-specific fix packages may precede the main Mod List in community guides.
+  const aspyrStart = hasListHeading ? merged.findIndex((section, index) => index < listStart && section.level === 2 &&
+    (/aspyr/i.test(section.title) || (/^critical:/i.test(section.title) && /aspyr/i.test(section.lines.join("\n"))))) : -1;
+  const aspyrEnd = aspyrStart < 0 ? -1 : merged.findIndex((section, index) => index > aspyrStart && section.level <= 2);
+  const aspyrBoundary = aspyrEnd < 0 ? listStart : aspyrEnd;
+  const aspyrMods = aspyrStart < 0 ? [] : merged.slice(aspyrStart + 1, aspyrBoundary).filter(isModSection);
+
   // Before-content: everything after the title heading up to the mod list heading.
   const beforeParts: string[] = [];
   for (let i = 0; i < listStart; i++) {
     const s = merged[i];
+    if (aspyrMods.length && i >= aspyrStart && i < aspyrBoundary) continue;
     if (i === titleIdx) beforeParts.push(s.lines.join("\n"));
     else beforeParts.push(sectionText(s));
   }
@@ -502,9 +532,13 @@ export function parseMarkdownBuild(md: string, profile: MarkdownImportProfile = 
   const intro = listIntro.replace(configCommentRe, "").trim();
   if (intro) beforeRaw = [beforeRaw.trim(), intro].filter(Boolean).join("\n\n");
 
-  const pendings: PendingMod[] = [];
+  const pendings: PendingMod[] = aspyrMods.map((section) => {
+    const pending = parseModSection(section, state, false);
+    pending.mod.aspyrOnly = true;
+    return pending;
+  });
   const afterParts: string[] = [];
-  let aspyr: string | undefined;
+  let aspyr: string | undefined = aspyrMods.length ? sectionText(merged[aspyrStart]) : undefined;
   let widescreen: string | undefined;
   let inWidescreen = false;
   const orphan: Section[] = [];

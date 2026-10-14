@@ -41,6 +41,10 @@ export async function runCheckpointsList(flags: CheckpointFlags): Promise<number
 
 export async function runCheckpointsRestore(session: string, checkpoint: string, flags: CheckpointFlags): Promise<number> {
   const store = await storeFromFlags(flags);
+  const recorded = await store.getSession(session);
+  if (resolvePath(recorded.kotorDirectory) !== resolvePath(store.kotorDirectory)) {
+    throw new CliError("Checkpoint belongs to a different game directory; pass its directory explicitly with --kotor");
+  }
   const started = performance.now();
   let last = -1;
   await store.restore(session, checkpoint, (done, total) => {

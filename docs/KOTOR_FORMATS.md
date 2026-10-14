@@ -114,7 +114,7 @@ Entry table at offset 20, 40 bytes each:
 | 32 | u32 | StringSize (bytes, no terminator) |
 | 36 | f32 | SoundLength (write 0.0) |
 
-String data follows. Encoding per LanguageID: cp1252 for 0-4, cp1250 Polish, cp949 Korean, cp950 Trad. Chinese, cp936 Simp. Chinese, cp932 Japanese. Entry index = StrRef. Write `flags = 1 | (sound?2:0) | (sound?4:0)`. StrRef -1 / 0xFFFFFFFF = none. Append operations add entries at index StringCount.
+String data follows. Encoding per LanguageID: cp1252 for 0-4, cp1250 Polish, cp949 Korean, cp950 Trad. Chinese, cp936 Simp. Chinese, cp932 Japanese. The TypeScript codec supports all listed Windows code pages and rejects unknown languages or text that cannot be encoded without loss. Entry index = StrRef. Write `flags = 1 | (sound?2:0) | (sound?4:0)`. StrRef -1 / 0xFFFFFFFF = none. Append operations add entries at index StringCount.
 
 ## 4. SSF V1.1 (KOTOR soundset)
 
@@ -266,7 +266,7 @@ Value=2DAMEMORY0
 - Path elements matched case-sensitively; list children by 0-based integer.
 
 ### [CompileList]
-`File0=myscript.nss`, optional `[myscript.nss]` with `!Destination`, `!SaveAs`, `!ReplaceFile`, `!SourceFolder`. Placeholders `#2DAMEMORY1#` and `#StrRef1#` substituted, then compiled with `nwnnsscomp.exe`. A reimplementation may skip with a warning or use a precompiled `.ncs` from tslpatchdata.
+`File0=myscript.nss`, optional `[myscript.nss]` with `!Destination`, `!SaveAs`, `!ReplaceFile`, `!SourceFolder`. Placeholders `#2DAMEMORY1#` and `#StrRef1#` substituted, then compiled with `nwnnsscomp.exe`. The native TypeScript implementation uses a precompiled `.ncs` from tslpatchdata when present. Missing precompiled files and source placeholders that require recompilation produce an error, so incomplete script installation cannot report success. A native compiler is not bundled.
 
 ### [HACKList]
 `File0=script.ncs`, `[script.ncs]`: `!Destination`, `!ReplaceFile`, `!SaveAs`, and `<byteOffset>=<value>` lines. Offset decimal (or 0x hex); value literal integer or `StrRef#`/`2DAMEMORY#`, written as unsigned 16-bit big-endian at that offset.

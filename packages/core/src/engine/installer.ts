@@ -28,7 +28,7 @@ import type {
   InstructionFile,
 } from "../model/types.js";
 import type { FileSystemPort } from "../ports/filesystem.js";
-import { executeInstruction, predictTouched } from "./actions/index.js";
+import { executeInstruction, gateInstruction, predictTouched } from "./actions/index.js";
 import { CancelledError } from "./actions/common.js";
 import { createInstallContext, type InstallContext } from "./context.js";
 import { computeInstallOrder } from "./order.js";
@@ -166,11 +166,7 @@ export class Installer extends EventEmitter {
     try {
       const { selection, mods, issues } = this.plan(opts);
       const errors = issues.filter((i) => i.severity === "error");
-      if (errors.length) {
-        this.emitEvent({ type: "install-error", message: errors.map((e) => e.message).join("\n") });
-        summary.finishedAt = new Date().toISOString();
-        return summary;
-      }
+      if (errors.length) throw new Error(errors.map((e) => e.message).join("\n"));
       for (const w of issues) this.emitEvent({ type: "log", level: "warn", message: w.message });
 
       const ctx: InstallContext = createInstallContext({
@@ -202,8 +198,7 @@ export class Installer extends EventEmitter {
           summary.checkpointSessionId = session.id;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          logger.warn(`checkpoints disabled: ${message}`);
-          this.emitEvent({ type: "log", level: "warn", message: `checkpoints disabled: ${message}` });
+          throw new Error(`checkpoint session creation failed; installation was not started: ${message}`, { cause: err });
         }
       }
 
@@ -276,6 +271,13 @@ export class Installer extends EventEmitter {
         mod.installState = modResult.state;
         summary.mods.push(modResult);
         this.emitEvent({ type: "mod-finished", result: modResult });
+        if (modResult.state === "Failed") {
+          if (!controller.signal.aborted) {
+            const failure = modResult.instructionResults.find((result) => !isSoftResult(result));
+            this.emitEvent({ type: "install-error", message: `Installation stopped at ${mod.name}: ${failure?.message ?? failure?.code ?? "instruction failed"}` });
+          }
+          break;
+        }
       }
 
       summary.finishedAt = new Date().toISOString();
@@ -286,7 +288,9 @@ export class Installer extends EventEmitter {
       const message = err instanceof Error ? err.message : String(err);
       logger.error(`install failed: ${message}`);
       summary.finishedAt = new Date().toISOString();
+      summary.failed = Math.max(1, summary.failed);
       this.emitEvent({ type: "install-error", message });
+      this.emitEvent({ type: "install-finished", summary });
       return summary;
     } finally {
       this.currentModGuid = undefined;
@@ -319,12 +323,24 @@ export class Installer extends EventEmitter {
       action: instruction.action,
       description: instruction.description ?? describeBriefly(instruction),
     });
+    let predicted: string[] = [];
+    const opaqueWrites = !gateInstruction(ctx, instruction, mod, option) && (instruction.action === "Patcher" || instruction.action === "Execute");
     if (store && session) {
-      const predicted = await predictTouched(ctx, instruction);
+      // These tools decide their output files at runtime. Save all existing game
+      // files before invoking them, then scan again to discover newly created files.
       try {
+        predicted = opaqueWrites ? await ctx.fs.walk(ctx.dirs.kotorDirectory) : await predictTouched(ctx, instruction);
         await store.beforeTouch(session, predicted);
       } catch (err) {
-        ctx.logger.warn(`checkpoint beforeTouch failed: ${err instanceof Error ? err.message : String(err)}`);
+        const message = `checkpoint baseline failed; instruction was not executed: ${err instanceof Error ? err.message : String(err)}`;
+        ctx.logger.error(message);
+        const result: InstructionResult = {
+          instructionGuid: instruction.guid, modGuid: mod.guid, optionGuid: option?.guid,
+          action: instruction.action, code: "UnknownError", message, touched: [], durationMs: 0,
+        };
+        this.emitEvent({ type: "log", level: "error", message });
+        this.emitEvent({ type: "instruction-finished", result });
+        return result;
       }
     }
     const result = await executeInstruction(ctx, instruction, mod, option);
@@ -334,12 +350,16 @@ export class Installer extends EventEmitter {
           label: `${mod.name}: ${instruction.action}`,
           modGuid: mod.guid,
           instructionGuid: instruction.guid,
-          touched: result.touched,
+          touched: opaqueWrites
+            ? [...new Set([...predicted, ...await ctx.fs.walk(ctx.dirs.kotorDirectory), ...result.touched])]
+            : result.touched,
         });
         result.checkpointId = meta.id;
         this.emitEvent({ type: "checkpoint-created", checkpointId: meta.id, isAnchor: meta.isAnchor, index: meta.index });
       } catch (err) {
-        ctx.logger.warn(`checkpoint failed: ${err instanceof Error ? err.message : String(err)}`);
+        result.code = "UnknownError";
+        result.message = `checkpoint persistence failed; installation must stop: ${err instanceof Error ? err.message : String(err)}`;
+        ctx.logger.error(result.message);
       }
     }
     ctx.telemetry?.record({

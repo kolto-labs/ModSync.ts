@@ -46,6 +46,8 @@ export interface SelectionResult {
 
 export interface InstallStatus {
   running: boolean;
+  phase?: "base" | "widescreen";
+  order?: Guid[];
   currentMod?: Guid;
   summary?: InstallSummary;
   pendingPrompt?: UserPrompt;
@@ -117,6 +119,8 @@ export class AppState {
   installer: Installer | null = null;
   installRunning = false;
   installSessionId?: string;
+  installPhase?: "base" | "widescreen";
+  installOrder?: Guid[];
   currentMod?: Guid;
   lastSummary?: InstallSummary;
   pendingPrompt?: UserPrompt;
@@ -127,6 +131,8 @@ export class AppState {
   readonly telemetry = new InMemoryTelemetry();
 
   private downloads: DownloadManager | null = null;
+  private installTask?: Promise<void>;
+  private settingsTask: Promise<unknown> = Promise.resolve();
   private readonly subscribers = new Set<(env: EventEnvelope) => void>();
   private bytesPerSecond = new Map<string, number>();
 
@@ -187,19 +193,28 @@ export class AppState {
   // -------------------------------------------------------------------
 
   async updateSettings(patch: Partial<UserSettings>): Promise<UserSettings> {
-    const next: UserSettings = { ...this.settings };
-    for (const [k, v] of Object.entries(patch)) {
-      if (v === undefined || v === null) continue;
-      (next as unknown as Record<string, unknown>)[k] = v;
-    }
-    const downloadsChanged =
-      next.modDirectory !== this.settings.modDirectory ||
-      next.maxConcurrentDownloads !== this.settings.maxConcurrentDownloads ||
-      next.nexusApiKey !== this.settings.nexusApiKey;
-    this.settings = next;
-    await saveSettings(next, this.settingsPath);
-    if (downloadsChanged && this.downloads && !this.downloads.isRunning) this.downloads = null;
-    return next;
+    // Serialize writes so simultaneous requests cannot lose each other's changes.
+    const task = this.settingsTask.then(async () => {
+      if (this.installRunning) throw new HttpError(409, "Cannot change settings while an installation is running");
+      const next: UserSettings = { ...this.settings };
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === undefined || v === null) continue;
+        (next as unknown as Record<string, unknown>)[k] = v;
+      }
+      const downloadsChanged =
+        next.modDirectory !== this.settings.modDirectory ||
+        next.maxConcurrentDownloads !== this.settings.maxConcurrentDownloads ||
+        next.nexusApiKey !== this.settings.nexusApiKey;
+      if (downloadsChanged && this.downloads?.isRunning) {
+        throw new HttpError(409, "Pause downloads before changing download settings");
+      }
+      await saveSettings(next, this.settingsPath);
+      this.settings = next;
+      if (downloadsChanged) this.downloads = null;
+      return next;
+    });
+    this.settingsTask = task.catch(() => undefined);
+    return task;
   }
 
   // -------------------------------------------------------------------
@@ -212,6 +227,15 @@ export class AppState {
   }
 
   setFile(file: InstructionFile, path: string | null, warnings: string[] = []): InstructionFile {
+    if (this.installRunning) throw new HttpError(409, "Cannot replace the instruction file while an installation is running");
+    this.lastSummary = undefined;
+    this.currentMod = undefined;
+    this.pendingPrompt = undefined;
+    this.installSessionId = undefined;
+    this.installPhase = undefined;
+    this.installOrder = undefined;
+    // Preserve monotonic sequence numbers while discarding events for the old document.
+    this.events.clear();
     this.file = file;
     this.filePath = path;
     this.fileWarnings = warnings;
@@ -247,6 +271,8 @@ export class AppState {
   installStatus(): InstallStatus {
     return {
       running: this.installRunning,
+      phase: this.installPhase,
+      order: this.installOrder,
       currentMod: this.currentMod,
       summary: this.lastSummary,
       pendingPrompt: this.pendingPrompt,
@@ -275,12 +301,17 @@ export class AppState {
     this.installer = installer;
     this.installRunning = true;
     this.installSessionId = sessionId;
+    this.installPhase = opts.phase ?? "base";
+    this.installOrder = undefined;
     this.currentMod = undefined;
     this.lastSummary = undefined;
     this.pendingPrompt = undefined;
 
     installer.on("event", (event) => {
       switch (event.type) {
+        case "install-started":
+          this.installOrder = [...event.order];
+          break;
         case "mod-started":
           this.currentMod = event.modGuid;
           break;
@@ -301,7 +332,7 @@ export class AppState {
       this.publish(event);
     });
 
-    void installer
+    this.installTask = installer
       .run(opts)
       .then((summary) => {
         this.lastSummary = summary;
@@ -323,10 +354,16 @@ export class AppState {
 
   answerPrompt(answer: UserPromptAnswer): void {
     if (!this.installer) throw new HttpError(409, "No installation is running");
-    if (this.pendingPrompt && answer.promptId && this.pendingPrompt.id !== answer.promptId) {
-      throw new HttpError(409, `Prompt ${answer.promptId} is not pending (current: ${this.pendingPrompt.id})`);
+    const prompt = this.pendingPrompt;
+    if (!prompt || answer.promptId !== prompt.id) throw new HttpError(409, "This prompt is no longer pending");
+    if (answer.accepted !== undefined && typeof answer.accepted !== "boolean") throw new HttpError(400, "accepted must be a boolean");
+    if (answer.choiceId !== undefined && (typeof answer.choiceId !== "string" || !prompt.choices.some((c) => c.id === answer.choiceId))) {
+      throw new HttpError(400, "choiceId must identify one of the pending prompt's choices");
     }
-    this.installer.answerPrompt(answer);
+    if (prompt.choices.length && !answer.choiceId && !prompt.allowNone && answer.accepted !== false) {
+      throw new HttpError(400, "choiceId is required for this prompt");
+    }
+    if (!this.installer.answerPrompt(answer)) throw new HttpError(409, "This prompt is no longer pending");
     this.pendingPrompt = undefined;
   }
 
@@ -377,6 +414,8 @@ export class AppState {
   async close(): Promise<void> {
     this.cancelInstall();
     this.downloads?.pause();
+    await this.installTask;
+    await this.settingsTask;
     await this.logger.flush();
   }
 }

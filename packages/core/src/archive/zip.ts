@@ -3,16 +3,15 @@
  * extraction, zip64 support comes for free.
  */
 
-import { createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import yauzl from "yauzl";
 
-import { joinPath, normalizePath, parentPath } from "../fs/paths.js";
-import type { ArchiveEntry, ArchiveReader } from "../ports/archive.js";
-import { ArchiveEntryNotFoundError, ArchiveError, findEntry, normalizeEntryPath, sortEntries } from "./common.js";
+import { joinPath, normalizePath } from "../fs/paths.js";
+import type { ArchiveEntry, ArchiveExtractOptions, ArchiveReader } from "../ports/archive.js";
+import { ArchiveEntryNotFoundError, ArchiveError, beforeArchiveWrite, openArchiveOutput, prepareArchiveTarget, findEntry, normalizeEntryPath, sortEntries } from "./common.js";
 
 interface ZipEntryRecord extends ArchiveEntry {
   raw: yauzl.Entry;
@@ -76,20 +75,18 @@ export class ZipArchive implements ArchiveReader {
     return records.map(({ path, isDirectory, size }) => ({ path, isDirectory, size }));
   }
 
-  async extract(destDir: string, filter?: (entry: ArchiveEntry) => boolean): Promise<string[]> {
+  async extract(destDir: string, filter?: (entry: ArchiveEntry) => boolean, options: ArchiveExtractOptions = {}): Promise<string[]> {
     const dest = normalizePath(destDir);
+    await beforeArchiveWrite(dest, options);
     await mkdir(dest, { recursive: true });
     const written: string[] = [];
     for (const record of await this.records()) {
       if (filter && !filter(record)) continue;
       const target = joinPath(dest, record.path);
-      if (record.isDirectory) {
-        await mkdir(target, { recursive: true });
-        continue;
-      }
-      await mkdir(parentPath(target), { recursive: true });
+      await prepareArchiveTarget(dest, target, options, record);
+      if (record.isDirectory) continue;
       const stream = await openReadStream(this.zipfile, record.raw);
-      await pipeline(stream, createWriteStream(target));
+      await pipeline(stream, await openArchiveOutput(target), { signal: options.signal });
       written.push(target);
     }
     return written;

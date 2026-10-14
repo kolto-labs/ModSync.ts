@@ -65,8 +65,15 @@ export async function resolveWildcards(fs: FileSystemPort, absolutePattern: stri
   const isMatch = picomatch(escapeLiteral(rest), PICOMATCH_OPTIONS);
 
   const matches: string[] = [];
+  const visited = new Set<string>();
   const visit = async (d: string, relPrefix: string, depth: number): Promise<void> => {
     if (depth > maxDepth) return;
+    if (fs.realpath) {
+      let canonical: string;
+      try { canonical = await fs.realpath(d); } catch { return; }
+      if (visited.has(canonical)) return;
+      visited.add(canonical);
+    }
     let entries: DirEntry[];
     try {
       entries = await fs.readDir(d);

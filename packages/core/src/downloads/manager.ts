@@ -8,7 +8,7 @@ import { EventEmitter } from "node:events";
 import { createHash, randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, open, rename, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, extname, join } from "node:path";
 import type { DownloadEvent, Guid } from "../model/types.js";
 import { classifyUrl, fileNameFromUrl, nexusDownloadLinkUrl, type UrlClassification } from "./hosts.js";
 
@@ -91,8 +91,6 @@ interface NexusLink {
   URI: string;
 }
 
-const NEXUS_API = "https://api.nexusmods.com";
-
 export class DownloadManager extends EventEmitter {
   private readonly items = new Map<string, DownloadItem>();
   private readonly order: string[] = [];
@@ -100,6 +98,8 @@ export class DownloadManager extends EventEmitter {
   private readonly fetchImpl: typeof fetch;
   private readonly opts: Required<Pick<DownloadManagerOptions, "modDirectory" | "maxConcurrentDownloads" | "progressIntervalMs">> &
     DownloadManagerOptions;
+  private readonly partPaths = new Map<string, string>();
+  private readonly pathOwners = new Map<string, string>();
   private running = false;
   private active = 0;
   private idleResolvers: Array<() => void> = [];
@@ -154,7 +154,7 @@ export class DownloadManager extends EventEmitter {
   /** Begin (or resume) processing the queue. Paused items are re-queued. */
   start(): void {
     this.running = true;
-    for (const item of this.items.values()) if (item.state === "paused") item.state = "queued";
+    for (const item of this.items.values()) if (item.state === "paused" && !this.controllers.has(item.id)) item.state = "queued";
     this.pump();
   }
 
@@ -171,7 +171,7 @@ export class DownloadManager extends EventEmitter {
   /** Put a failed or needs-browser item back in the queue. */
   retry(id: string): boolean {
     const item = this.items.get(id);
-    if (!item || item.state === "downloading" || item.state === "done") return false;
+    if (!item || this.controllers.has(id) || item.state === "downloading" || item.state === "done") return false;
     item.state = "queued";
     item.error = undefined;
     item.reason = undefined;
@@ -235,7 +235,7 @@ export class DownloadManager extends EventEmitter {
       const c = item.classification;
       if (c.nxm) return await this.handleNxm(item);
       if (c.host === "nexus") {
-        const direct = await this.resolveNexus(item);
+        const direct = await this.resolveNexus(item, ctrl.signal);
         if (!direct) return;
         return await this.download(item, direct, ctrl.signal);
       }
@@ -243,7 +243,7 @@ export class DownloadManager extends EventEmitter {
       return await this.download(item, item.url, ctrl.signal);
     } catch (err) {
       if (ctrl.signal.aborted) {
-        item.state = "paused";
+        item.state = this.running ? "queued" : "paused";
         return;
       }
       this.fail(item, err instanceof Error ? err.message : String(err));
@@ -275,7 +275,7 @@ export class DownloadManager extends EventEmitter {
   }
 
   /** Resolve a Nexus mod page to a direct link via the API, or flag it for the browser. */
-  private async resolveNexus(item: DownloadItem): Promise<string | undefined> {
+  private async resolveNexus(item: DownloadItem, signal: AbortSignal): Promise<string | undefined> {
     const { game, modId, fileId } = item.classification;
     if (!this.opts.nexusApiKey) {
       this.needsBrowser(item, "Nexus Mods downloads need an API key or a browser session");
@@ -288,6 +288,7 @@ export class DownloadManager extends EventEmitter {
     const api = nexusDownloadLinkUrl(game, modId, fileId);
     const res = await this.fetchImpl(api, {
       headers: { apikey: this.opts.nexusApiKey, accept: "application/json", ...this.uaHeader() },
+      signal,
     });
     if (res.status === 401 || res.status === 403) {
       this.needsBrowser(item, `Nexus API refused the key (${res.status}); premium is required for API downloads`);
@@ -298,6 +299,18 @@ export class DownloadManager extends EventEmitter {
     const first = Array.isArray(links) ? links.find((l) => typeof l?.URI === "string") : undefined;
     if (!first) throw new Error("Nexus API returned no download links");
     return first.URI;
+  }
+
+  /** Keep distinct queue items from sharing a partial or final file. */
+  private reservePath(name: string, id: string): string {
+    let path = join(this.opts.modDirectory, name);
+    const owner = this.pathOwners.get(path);
+    if (owner && owner !== id) {
+      const ext = extname(name);
+      path = join(this.opts.modDirectory, `${name.slice(0, name.length - ext.length)}-${id}${ext}`);
+    }
+    this.pathOwners.set(path, id);
+    return path;
   }
 
   private uaHeader(): Record<string, string> {
@@ -311,10 +324,14 @@ export class DownloadManager extends EventEmitter {
   private async download(item: DownloadItem, url: string, signal: AbortSignal): Promise<void> {
     await mkdir(this.opts.modDirectory, { recursive: true });
     const provisionalName = item.fileName ?? sanitizeFileName(fileNameFromUrl(url) ?? "") ?? "";
-    const partPath = join(this.opts.modDirectory, `${provisionalName || `download-${item.id}`}.part`);
+    let partPath = this.partPaths.get(item.id);
+    if (!partPath) {
+      partPath = this.reservePath(`${provisionalName || `download-${item.id}`}.part`, item.id);
+      this.partPaths.set(item.id, partPath);
+    }
 
     // Resume when a partial file exists.
-    let offset = 0;
+    let offset: number;
     try {
       offset = (await stat(partPath)).size;
     } catch {
@@ -363,7 +380,8 @@ export class DownloadManager extends EventEmitter {
     const cdName = sanitizeFileName(parseContentDispositionFileName(res.headers.get("content-disposition")) ?? "");
     const finalName = item.fileName || cdName || sanitizeFileName(fileNameFromUrl(res.url || url) ?? "") || `download-${item.id}`;
     item.fileName = finalName;
-    const finalPath = join(this.opts.modDirectory, finalName);
+    const finalPath = this.reservePath(finalName, item.id);
+    item.fileName = basename(finalPath);
 
     // Total size.
     const lengthHeader = res.headers.get("content-length");
@@ -378,7 +396,7 @@ export class DownloadManager extends EventEmitter {
     if (total !== undefined && !Number.isFinite(total)) total = undefined;
     item.totalBytes = total;
     item.receivedBytes = offset;
-    this.emitEvent({ type: "download-started", id: item.id, fileName: finalName, totalBytes: total });
+    this.emitEvent({ type: "download-started", id: item.id, fileName: item.fileName!, totalBytes: total });
 
     // Hash whatever we already have.
     const hash = createHash("sha1");
@@ -420,7 +438,12 @@ export class DownloadManager extends EventEmitter {
         if (done) break;
         if (!value) continue;
         hash.update(value);
-        await out.write(value);
+        let written = 0;
+        while (written < value.byteLength) {
+          const result = await out.write(value, written, value.byteLength - written);
+          if (result.bytesWritten === 0) throw new Error("download file write made no progress");
+          written += result.bytesWritten;
+        }
         item.receivedBytes += value.byteLength;
         progress();
       }
@@ -428,6 +451,7 @@ export class DownloadManager extends EventEmitter {
       await out.close().catch(() => undefined);
     }
 
+    signal.throwIfAborted();
     if (total !== undefined && item.receivedBytes !== total) {
       throw new Error(`incomplete download: got ${item.receivedBytes} of ${total} bytes`);
     }
@@ -444,7 +468,7 @@ export class DownloadManager extends EventEmitter {
     item.path = finalPath;
     item.state = "done";
     item.finishedAt = new Date().toISOString();
-    this.emitEvent({ type: "download-finished", id: item.id, fileName: finalName, path: finalPath, sha1 });
+    this.emitEvent({ type: "download-finished", id: item.id, fileName: item.fileName!, path: finalPath, sha1 });
   }
 }
 

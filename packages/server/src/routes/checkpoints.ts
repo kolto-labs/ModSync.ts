@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { resolve } from "node:path";
 import { CheckpointError } from "@modsync/core";
 import { HttpError, type AppState } from "../state.js";
 
@@ -18,8 +19,10 @@ export function registerCheckpointRoutes(app: FastifyInstance, state: AppState):
     } catch (err) {
       throw new HttpError(404, err instanceof Error ? err.message : String(err));
     }
-    // Restore into the directory the session was recorded for, even if settings moved on.
-    const target = session.kotorDirectory === store.kotorDirectory ? store : state.createCheckpointStore(session.kotorDirectory);
+    if (resolve(session.kotorDirectory) !== resolve(store.kotorDirectory)) {
+      throw new HttpError(409, "Checkpoint belongs to a different game directory; select that directory in settings before restoring");
+    }
+    const target = store;
     let files = 0;
     try {
       await target.restore(req.params.session, req.params.id, (done, total) => {
@@ -37,6 +40,7 @@ export function registerCheckpointRoutes(app: FastifyInstance, state: AppState):
   });
 
   app.delete<{ Params: { session: string } }>("/api/checkpoints/:session", async (req) => {
+    if (state.installRunning) throw new HttpError(409, "Cannot delete checkpoints while an installation is running");
     if (!state.settings.kotorDirectory) throw new HttpError(400, "kotorDirectory is not set");
     await state.createCheckpointStore().delete(req.params.session);
     return { ok: true };

@@ -6,6 +6,9 @@
  */
 export interface PatcherFs {
   exists(p: string): Promise<boolean>;
+  /** Resolve existing symbolic links. Native adapters must provide this for path containment. */
+  realpath?(p: string): Promise<string>;
+  isSymbolicLink?(p: string): Promise<boolean>;
   readFile(p: string): Promise<Uint8Array>;
   writeFile(p: string, data: Uint8Array): Promise<void>;
   /** Create a directory and all missing parents; no error when it exists. */
