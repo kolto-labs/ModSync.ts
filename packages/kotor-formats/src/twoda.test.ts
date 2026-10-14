@@ -71,6 +71,23 @@ describe("2da", () => {
     expect(t.maxIntRowLabel()).toBe(1);
   });
 
+  it("rejects cell offsets outside the declared data block", () => {
+    const t = new TwoDA(["a"]);
+    t.addRow("0", { a: "value" });
+    const bytes = write2da(t);
+    // Nine-byte signature, three-byte column list, count, row label.
+    new DataView(bytes.buffer).setUint16(18, 6, true);
+    expect(() => read2da(bytes)).toThrow(/outside the data block/);
+  });
+
+  it("rejects cell strings terminated only after the declared data block", () => {
+    const t = new TwoDA(["a"]);
+    t.addRow("0", { a: "value" });
+    const bytes = write2da(t);
+    new DataView(bytes.buffer).setUint16(20, 5, true);
+    expect(() => read2da(bytes)).toThrow();
+  });
+
   it("rejects an oversized data block", () => {
     const t = new TwoDA(["a"]);
     for (let i = 0; i < 20000; i++) t.addRow(undefined, { a: `value${i}` });

@@ -41,6 +41,24 @@ describe("tlk", () => {
     expect(() => t.replace(5, "x")).toThrow(/out of range/);
   });
 
+  it("preserves nonzero volume and pitch variance when adding entries", () => {
+    const t = new Tlk();
+    t.entries.push({ text: "original", soundResRef: "sound", volumeVariance: 7, pitchVariance: 9 });
+    const back = readTlk(writeTlk(t));
+    back.add("appended");
+    const result = readTlk(writeTlk(back));
+    expect(result.entries[0]!.volumeVariance).toBe(7);
+    expect(result.entries[0]!.pitchVariance).toBe(9);
+  });
+
+  it("rejects a string data offset overlapping its entry table", () => {
+    const t = new Tlk();
+    t.add("test");
+    const bytes = writeTlk(t);
+    new DataView(bytes.buffer).setUint32(16, 20, true);
+    expect(() => readTlk(bytes)).toThrow(/overlaps/);
+  });
+
   it("uses cp1250 for Polish", () => {
     const t = new Tlk(5);
     t.add("Zażółć gęślą jaźń");
@@ -50,12 +68,32 @@ describe("tlk", () => {
     expect(decodeCp1250(Uint8Array.from([0xa5]))).toBe("Ą");
   });
 
-  it("warns for unsupported code pages", () => {
-    const warnings: string[] = [];
-    const t = new Tlk(128);
-    t.add("abc");
-    const bytes = writeTlk(t, { warn: (m) => warnings.push(m) });
-    readTlk(bytes, { warn: (m) => warnings.push(m) });
-    expect(warnings).toHaveLength(2);
+  it.each([
+    [128, "한국어", [0xc7, 0xd1, 0xb1, 0xb9, 0xbe, 0xee]],
+    [129, "中文", [0xa4, 0xa4, 0xa4, 0xe5]],
+    [130, "中文", [0xd6, 0xd0, 0xce, 0xc4]],
+    [131, "日本語", [0x93, 0xfa, 0x96, 0x7b, 0x8c, 0xea]],
+  ] as const)("round-trips language %i with its Windows encoding", (language, text, expected) => {
+    const t = new Tlk(language);
+    t.add(text);
+    const bytes = writeTlk(t);
+    expect(Array.from(bytes.subarray(60))).toEqual(expected);
+    expect(readTlk(bytes).entries[0]!.text).toBe(text);
+    expect(writeTlk(readTlk(bytes))).toEqual(bytes);
+  });
+
+  it("rejects unknown code pages and unrepresentable text", () => {
+    expect(() => writeTlk(new Tlk(999))).toThrow(/unsupported TLK language/);
+    const t = new Tlk(0);
+    t.add("한국어");
+    expect(() => writeTlk(t)).toThrow(/cannot be represented/);
+  });
+
+  it("rejects malformed East Asian string data", () => {
+    const t = new Tlk(131);
+    t.add("a");
+    const bytes = writeTlk(t);
+    bytes[60] = 0x82; // Incomplete Shift-JIS lead byte.
+    expect(() => readTlk(bytes)).toThrow(/invalid cp932/);
   });
 });

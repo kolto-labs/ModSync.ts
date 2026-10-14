@@ -4,6 +4,13 @@ import type { PatcherFs } from "./fs.js";
 
 /** PatcherFs backed by node:fs/promises. */
 export class NodePatcherFs implements PatcherFs {
+  async isSymbolicLink(p: string): Promise<boolean> {
+    try { return (await fsp.lstat(p)).isSymbolicLink(); }
+    catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return false; throw err; }
+  }
+  async realpath(p: string): Promise<string> {
+    return fsp.realpath(p);
+  }
   async exists(p: string): Promise<boolean> {
     try {
       await fsp.access(p);

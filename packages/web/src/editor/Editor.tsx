@@ -36,7 +36,7 @@ export function Editor() {
   const readOnly = Boolean(file.rustAuthoringGuide);
 
   useEffect(() => {
-    if (!s.draft && s.file) actions.setDraft(s.file);
+    if (!s.draft) actions.setDraft(s.file ?? blankFile());
   }, [s.draft, s.file]);
 
   const update = (next: InstructionFile) => { if (!readOnly) actions.setDraft(next); };
@@ -58,6 +58,7 @@ export function Editor() {
     if (!committed) return;
     try {
       await api.saveFile(savePath);
+      setState({ fileSource: savePath });
       toast("success", `Saved to ${savePath}`);
       setDialog(null);
     } catch (err) {
@@ -68,7 +69,10 @@ export function Editor() {
   const runExport = async (style: MarkdownStyle) => {
     setDialog({ kind: "export", style, busy: true });
     try {
-      if (dirty) await actions.commitDraft();
+      if ((dirty || !s.file) && !await actions.commitDraft()) {
+        setDialog({ kind: "export", style });
+        return;
+      }
       const { markdown } = await api.exportMarkdown(style);
       setDialog({ kind: "export", style, markdown });
     } catch (err) {
@@ -94,7 +98,10 @@ export function Editor() {
   const runMerge = async (content: string) => {
     setDialog({ kind: "merge", content, busy: true });
     try {
-      if (dirty) await actions.commitDraft();
+      if ((dirty || !s.file) && !await actions.commitDraft()) {
+        setDialog({ kind: "merge", content });
+        return;
+      }
       const result = await api.mergeFile(content);
       actions.setDraft(result.file);
       setDialog({ kind: "merge", content, result });
@@ -206,7 +213,7 @@ export function Editor() {
             </>
           }
         >
-          <p className="muted small">The draft is sent to the server (PUT /api/file) and then written to disk (POST /api/file/save).</p>
+          <p className="muted small">Save the current build to a TOML instruction file on this computer.</p>
           <div className="row">
             <input className="grow mono" value={savePath} onChange={(e) => setSavePath(e.target.value)} placeholder="/path/to/build.toml" />
             <button className="btn" onClick={() => setDialog({ kind: "browse-save" })}>

@@ -5,7 +5,7 @@ Republic 1 and 2. Think of TSLPatcher's ChangeEdit for `changes.ini`, but for
 many mods at once, with a much simpler syntax, aimed at end users who want a
 one-click install according to the modder's configuration.
 
-This repository is a full TypeScript reimplementation of the original C#
+This repository is a TypeScript reimplementation of the original C#
 [KOTORModSync](https://github.com/th3w1zard1/KOTORModSync), delivered as a
 hybrid Electron desktop app and a local web server with the same UI.
 
@@ -56,6 +56,21 @@ pnpm modsync import-md full.md -o build.toml
 ```
 
 Run the tests with `pnpm test`.
+
+Run `pnpm check` to build every package, typecheck the application and runner
+tools, lint, and run the test suite. Node 20.19+, 22.13+, or 24+ and the pinned
+pnpm 10.33.0 are required; `corepack pnpm install --frozen-lockfile` uses that
+version directly.
+
+Build a portable desktop application with `pnpm package:desktop`. The platform
+application is written under `packages/electron/release/`; signing and native
+installer delivery are separate steps. See the [desktop instructions](packages/electron/README.md).
+
+Six manual GitHub workflows verify synthetic K1/TSL installations: separate CLI
+and native Electron click-through jobs on Linux, Windows, and macOS. They import
+the pinned `kolto-labs/mod-builds` `full.md` files and use original synthetic
+payloads, so copyrighted game resources are unnecessary. See
+[runner verification](docs/RUNNERS.md) for commands and the proof boundaries.
 
 ## Design principles carried over from the original
 

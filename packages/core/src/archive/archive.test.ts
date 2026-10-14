@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
@@ -178,6 +178,7 @@ describe("common helpers", () => {
     expect(normalizeEntryPath("a/../../evil")).toBeUndefined();
     expect(normalizeEntryPath("")).toBeUndefined();
     expect(normalizeEntryPath("./")).toBeUndefined();
+    expect(normalizeEntryPath("safe\nother")).toBeUndefined();
   });
 
   it("findEntry prefers exact then case-insensitive matches", () => {
@@ -188,6 +189,66 @@ describe("common helpers", () => {
     expect(findEntry(entries, "a/b.txt")?.size).toBe(2);
     expect(findEntry(entries, "A/B.TXT")?.size).toBe(1);
     expect(findEntry(entries, "nope")).toBeUndefined();
+  });
+});
+
+describe("streaming extraction guards", () => {
+  it("applies beforeWrite denial for every native adapter before any file writes", async () => {
+    for (const [index, archive] of [zipPath, rarPath, sevenZipPath, sfxPath].entries()) {
+      const reader = await openArchive(archive);
+      const dest = `${root}/deny-${index}`;
+      const checked: string[] = [];
+      try {
+        await expect(reader.extract(dest, undefined, { beforeWrite: (target, entry) => {
+          checked.push(target);
+          if (entry && !entry.isDirectory) throw new Error("denied destination");
+        } })).rejects.toThrow("denied destination");
+        expect(checked.some((target) => target.endsWith("Nested.TPC"))).toBe(true);
+        await expect(readFile(`${dest}/Override/Nested.TPC`)).rejects.toThrow();
+        await expect(readFile(`${dest}/readme.txt`)).rejects.toThrow();
+      } finally { await reader.close(); }
+    }
+  });
+
+  it("rejects archive links before native 7z extraction", () => {
+    expect(() => parseSevenZipListing("Path = redirect\nSize = 0\nSymbolic Link = /outside\nAttributes = A_ lrwxrwxrwx\n")).toThrow("links are not supported");
+  });
+
+  it("rechecks containment after a callback changes a parent into a symlink", async () => {
+    if (process.platform === "win32") return;
+    const dest = `${root}/callback-destination`;
+    const outside = `${root}/callback-outside`;
+    await mkdir(outside);
+    await writeFile(`${outside}/Nested.TPC`, "untouched");
+    const reader = await openZip(zipPath);
+    let redirected = false;
+    try {
+      await expect(reader.extract(dest, undefined, { beforeWrite: async (target, entry) => {
+        if (!redirected && entry?.path === "Override/Nested.TPC") {
+          redirected = true;
+          await rm(`${dest}/Override`, { recursive: true, force: true });
+          await symlink(outside, `${dest}/Override`);
+        }
+      } })).rejects.toThrow(/outside|escape/i);
+      expect(await readFile(`${outside}/Nested.TPC`, "utf8")).toBe("untouched");
+    } finally { await reader.close(); }
+  });
+
+  it("cancels streaming extraction and does not start subsequent entries", async () => {
+    const large = `${root}/large.zip`;
+    await writeFile(large, zipSync({ "large.bin": new Uint8Array(16 * 1024 * 1024).fill(65), "z-next.txt": text("must not start") }));
+    const reader = await openZip(large);
+    const controller = new AbortController();
+    let scheduled = false;
+    try {
+      await expect(reader.extract(`${root}/cancelled`, undefined, { signal: controller.signal, beforeWrite: (_target, entry) => {
+        if (!scheduled && entry?.path === "large.bin") {
+          scheduled = true;
+          setTimeout(() => controller.abort(), 5);
+        }
+      } })).rejects.toMatchObject({ name: "AbortError" });
+      await expect(readFile(`${root}/cancelled/z-next.txt`)).rejects.toThrow();
+    } finally { await reader.close(); }
   });
 });
 

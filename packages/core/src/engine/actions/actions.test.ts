@@ -1,7 +1,8 @@
-import { mkdir, readFile, readdir, stat, symlink } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, stat, symlink } from "node:fs/promises";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { openArchive } from "../../archive/index.js";
 import { RealFileSystem } from "../../fs/realFileSystem.js";
 import { VirtualFileSystem } from "../../fs/virtualFileSystem.js";
 import type { FileSystemPort } from "../../ports/filesystem.js";
@@ -249,10 +250,50 @@ describe.each(FLAVORS)("actions on %s file system", (flavor) => {
     expect(r.code).toBe("UserCancelled");
   });
 
+  it("rejects escaping symlinks across copy, delete, rename, and extraction", async () => {
+    const outside = `${sb.root}/outside`;
+    await mkdir(outside);
+    await writeText(`${outside}/secret.txt`, "untouched");
+    await writeText(`${sb.mods}/safe.txt`, "safe");
+    await symlink(outside, `${sb.kotor}/linked`, "dir");
+    await symlink(`${outside}/secret.txt`, `${sb.mods}/secret.txt`);
+    await writeZip(`${sb.mods}/archive.zip`, { "secret.txt": "overwritten" });
+    for (const instruction of [
+      instr("Copy", { source: ["<<modDirectory>>/safe.txt"], destination: "<<kotorDirectory>>/linked" }),
+      instr("Delete", { source: ["<<modDirectory>>/secret.txt"] }),
+      instr("Rename", { source: ["<<modDirectory>>/safe.txt"], destination: "<<kotorDirectory>>/linked/renamed.txt" }),
+      instr("Extract", { source: ["<<modDirectory>>/archive.zip"], destination: "<<kotorDirectory>>/linked" }),
+    ]) {
+      const result = await executeInstruction(makeCtx(flavor), instruction, mod(1));
+      expect(result.code, instruction.action).toBe("PathEscape");
+    }
+    expect(await readFile(`${outside}/secret.txt`, "utf8")).toBe("untouched");
+    expect(await readdir(outside)).toEqual(["secret.txt"]);
+  });
+
+  it("rejects archive entries targeting an escaping link inside a valid destination", async () => {
+    const outside = `${sb.root}/outside`;
+    await mkdir(outside);
+    await symlink(outside, `${sb.kotor}/Override/linked`, "dir");
+    await writeZip(`${sb.mods}/archive.zip`, { "linked/secret.txt": "bad" });
+    const result = await executeInstruction(makeCtx(flavor), instr("Extract", { source: ["<<modDirectory>>/archive.zip"], destination: "<<kotorDirectory>>/Override" }), mod(1));
+    expect(result.code).toBe("PathEscape");
+    expect(await readdir(outside)).toEqual([]);
+  });
+
+  it("rejects dangling destination links before writing", async () => {
+    const outside = `${sb.root}/new-secret.txt`;
+    await writeText(`${sb.mods}/safe.txt`, "safe");
+    await symlink(outside, `${sb.kotor}/Override/safe.txt`);
+    const result = await executeInstruction(makeCtx(flavor), instr("Copy", { source: ["<<modDirectory>>/safe.txt"], destination: "<<kotorDirectory>>/Override", overwrite: true }), mod(1));
+    expect(result.code).toBe("PathEscape");
+    expect(await exists(outside)).toBe(false);
+  });
+
   it("Execute checks existence in dry run and runs the program otherwise", async () => {
     if (process.platform === "win32") return;
     await mkdir(`${sb.mods}/tool`, { recursive: true });
-    await symlink(process.execPath, `${sb.mods}/tool/node`);
+    await copyFile(process.execPath, `${sb.mods}/tool/node`);
     const args = `-e "require('fs').writeFileSync('made.txt', 'ok')"`;
     const dry = makeCtx(flavor, undefined, { dryRun: true });
     const r = await executeInstruction(dry, instr("Execute", { source: ["<<modDirectory>>/tool/node"], arguments: args }), mod(1));
@@ -316,6 +357,21 @@ describe.each(FLAVORS)("actions on %s file system", (flavor) => {
     expect(r2.code).toBe("Success");
     expect(prompts).toHaveLength(1);
     expect(r2.touched).toContain(`${sb.kotor}/Override/one.txt`);
+  });
+});
+
+describe("streaming native extract action", () => {
+  it("extracts a large file without using the full-entry read API", async () => {
+    const payload = "streamed archive bytes\n".repeat(250_000);
+    await writeZip(`${sb.mods}/Large.zip`, { "large.txt": payload });
+    const reader = await openArchive(`${sb.mods}/Large.zip`);
+    const read = vi.spyOn(reader, "readEntry").mockRejectedValue(new Error("full-entry buffering is forbidden"));
+    const ctx = makeCtx("real");
+    ctx.openArchive = async () => reader;
+    const result = await executeInstruction(ctx, instr("Extract", { source: ["<<modDirectory>>/Large.zip"] }), mod(1));
+    expect(result.code).toBe("Success");
+    expect(read).not.toHaveBeenCalled();
+    expect(await readFile(`${sb.mods}/Large/large.txt`, "utf8")).toBe(payload);
   });
 });
 

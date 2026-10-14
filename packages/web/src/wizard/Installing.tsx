@@ -3,6 +3,8 @@ import { Modal } from "../components/Modal";
 import { actions, effectiveSelectedMods, findMod, modName, useAppState } from "../state/store";
 import type { UserPrompt } from "../types";
 
+const NO_IMAGES: string[] = [];
+
 export interface InstallRunnerProps {
   phase: "base" | "widescreen";
 }
@@ -80,7 +82,7 @@ export function InstallRunner({ phase }: InstallRunnerProps) {
           </div>
         </div>
 
-        <Slideshow images={currentMod?.images ?? []} name={currentMod?.name} />
+        <Slideshow images={currentMod?.images ?? NO_IMAGES} name={currentMod?.name} />
 
         <div className="mod-progress-list">
           {order.map((g) => {

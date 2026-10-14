@@ -1,0 +1,108 @@
+{
+  "corpusCommit": "21b2f0499d28ecd4ee2092701dee5792ba5da4b9",
+  "statement": "The source guide audit and controlled synthetic installation are separate lanes. This is not installation of either real modbuild.",
+  "results": [
+    {
+      "game": "KOTOR1",
+      "lane": "controlled-original-synthetic-CLI-install",
+      "authoredMods": 4,
+      "baseInstructionCount": 7,
+      "widescreenInstructionCount": 1,
+      "proofs": [
+        {
+          "path": "Override/baseline.txt",
+          "sha256": "462169f5b2d5b0117e34ce027993dd4932e72173d38b041b8968cbcf37791ff3"
+        },
+        {
+          "path": "Override/extracted.txt",
+          "sha256": "6dde056682dec9bc47bbb81c29b3b676d7cca566d7acb9e1333274f8a18a6b1f"
+        },
+        {
+          "path": "Override/renamed.txt",
+          "sha256": "be89a2cd0d64bb38d41c2b784141df6c483cdf559a91ef39661fb754666d3bef"
+        },
+        {
+          "path": "Override/chosen.txt",
+          "sha256": "3bc0a7f0ae9eba47657bcad967d1194d985355eb7d1c0ccbc1874967249eaf51"
+        },
+        {
+          "path": "Override/option.txt",
+          "sha256": "4490bca971ddd565c0f6a15ea7ac6d1810efbd6af65d658c79bbe6bfb6129f21"
+        },
+        {
+          "path": "Override/widescreen-phase.txt",
+          "sha256": "03ef338ab321d59df25754ddffd3095c56b86ec52e04dcab68712de3f04e4a6b"
+        }
+      ],
+      "dryRunNoWrites": true,
+      "bothPhaseRollbackToOriginalTreeVerified": true,
+      "actionsVerified": [
+        "Extract",
+        "Move",
+        "Copy",
+        "Rename",
+        "Delete",
+        "Choose"
+      ],
+      "notExercised": [
+        "Patcher",
+        "Execute",
+        "CleanList",
+        "binary widescreen patching",
+        "real game assets",
+        "source guide installation"
+      ]
+    },
+    {
+      "game": "KOTOR2",
+      "lane": "controlled-original-synthetic-CLI-install",
+      "authoredMods": 4,
+      "baseInstructionCount": 7,
+      "widescreenInstructionCount": 1,
+      "proofs": [
+        {
+          "path": "Override/baseline.txt",
+          "sha256": "462169f5b2d5b0117e34ce027993dd4932e72173d38b041b8968cbcf37791ff3"
+        },
+        {
+          "path": "Override/extracted.txt",
+          "sha256": "6dde056682dec9bc47bbb81c29b3b676d7cca566d7acb9e1333274f8a18a6b1f"
+        },
+        {
+          "path": "Override/renamed.txt",
+          "sha256": "be89a2cd0d64bb38d41c2b784141df6c483cdf559a91ef39661fb754666d3bef"
+        },
+        {
+          "path": "Override/chosen.txt",
+          "sha256": "3bc0a7f0ae9eba47657bcad967d1194d985355eb7d1c0ccbc1874967249eaf51"
+        },
+        {
+          "path": "Override/option.txt",
+          "sha256": "4490bca971ddd565c0f6a15ea7ac6d1810efbd6af65d658c79bbe6bfb6129f21"
+        },
+        {
+          "path": "Override/widescreen-phase.txt",
+          "sha256": "03ef338ab321d59df25754ddffd3095c56b86ec52e04dcab68712de3f04e4a6b"
+        }
+      ],
+      "dryRunNoWrites": true,
+      "bothPhaseRollbackToOriginalTreeVerified": true,
+      "actionsVerified": [
+        "Extract",
+        "Move",
+        "Copy",
+        "Rename",
+        "Delete",
+        "Choose"
+      ],
+      "notExercised": [
+        "Patcher",
+        "Execute",
+        "CleanList",
+        "binary widescreen patching",
+        "real game assets",
+        "source guide installation"
+      ]
+    }
+  ]
+}

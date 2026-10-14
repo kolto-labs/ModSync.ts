@@ -114,6 +114,7 @@ function sampleFile(): InstructionFile {
 function projectMod(mod: ModComponent, withGuids: boolean): unknown {
   const stripInstr = (i: ModComponent["instructions"][number]): unknown => {
     const { guid, ...rest } = i;
+    void guid;
     return withGuids ? i : rest;
   };
   return {

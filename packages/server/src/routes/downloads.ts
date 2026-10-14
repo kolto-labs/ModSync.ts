@@ -78,7 +78,7 @@ export async function computeDownloadNeeds(
     const missing: string[] = [];
     for (const pattern of patterns) {
       const abs = normalizePath(`${resolver.modDirectory}/${pattern}`);
-      let matches: string[] = [];
+      let matches: string[];
       try {
         matches = hasWildcard(abs) ? await resolveWildcards(fs, abs) : (await fs.exists(abs)) ? [abs] : [];
       } catch {

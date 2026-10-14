@@ -6,6 +6,8 @@
 
 import { openArchive } from "../archive/index.js";
 import { PathResolver } from "../fs/paths.js";
+import { VirtualFileSystem } from "../fs/virtualFileSystem.js";
+import { SandboxFileSystem } from "../fs/sandboxFileSystem.js";
 import { RealFileSystem } from "../fs/realFileSystem.js";
 import { NullLogger } from "../logging/logger.js";
 import type { Directories, Logger, TelemetrySink, UserPrompt, UserPromptAnswer, UserSettings } from "../model/types.js";
@@ -55,8 +57,10 @@ export const autoAnswerPrompt: PromptHandler = async (prompt) => {
 export function createInstallContext(opts: CreateInstallContextOptions): InstallContext {
   const logger = opts.logger ?? NullLogger;
   const dirs: Directories = { modDirectory: opts.settings.modDirectory, kotorDirectory: opts.settings.kotorDirectory };
+  const base = opts.fs ?? new RealFileSystem();
+  const fs = opts.dryRun && !base.isVirtual ? new VirtualFileSystem(base) : base;
   return {
-    fs: opts.fs ?? new RealFileSystem(),
+    fs: new SandboxFileSystem(fs, dirs),
     resolver: new PathResolver(dirs),
     dirs,
     settings: opts.settings,

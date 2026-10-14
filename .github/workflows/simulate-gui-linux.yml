@@ -1,0 +1,75 @@
+name: Synthetic native GUI simulation (linux)
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner environment
+        type: choice
+        options: [hosted, session]
+        default: hosted
+
+permissions:
+  contents: read
+
+concurrency:
+  group: synthetic-gui-linux-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-electron:
+    runs-on: ${{ inputs.runner == 'session' && fromJSON('["self-hosted","Linux","modsync-session"]') || 'ubuntu-24.04' }}
+    env:
+      ELECTRON_GET_USE_PROXY: ${{ inputs.runner == 'session' && '1' || '' }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout reviewed mod-build guide corpus
+        uses: actions/checkout@v4
+        with:
+          repository: kolto-labs/mod-builds
+          ref: 21b2f0499d28ecd4ee2092701dee5792ba5da4b9
+          path: guide-corpus
+      - uses: pnpm/action-setup@v4
+        if: inputs.runner != 'session'
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        if: inputs.runner != 'session'
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Use the session Node runtime and pinned Corepack pnpm shim
+        if: inputs.runner == 'session'
+        run: |
+          corepack_shim_dir="$RUNNER_TEMP/modsync-corepack"
+          mkdir -p "$corepack_shim_dir"
+          corepack enable --install-directory "$corepack_shim_dir" pnpm
+          echo "$corepack_shim_dir" >> "$GITHUB_PATH"
+          node --version
+          corepack pnpm --version
+      - run: corepack pnpm install --frozen-lockfile
+      - name: Install native Electron runtime libraries and display server
+        if: inputs.runner != 'session'
+        run: |
+          corepack pnpm exec playwright install-deps chromium
+          sudo apt-get install -y xvfb
+      - run: corepack pnpm build
+      - name: Verify complete pinned Electron runtime
+        run: node tools/ensure-electron-runtime.mjs
+      - name: "Click native wizard: pinned full.md audit and synthetic source-mapped installs"
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" corepack pnpm exec tsx tools/electron-clickthrough.ts --corpus guide-corpus --output artifacts/gui-linux
+      - name: Upload source mappings, screenshots, traces, logs and file hashes
+        if: always() && inputs.runner != 'session'
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-native-gui-linux
+          path: artifacts/gui-linux
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain session evidence in the provisioned runner workspace
+        if: always() && inputs.runner == 'session'
+        shell: bash
+        run: |
+          test -d artifacts
+          echo "Session proof remains in $GITHUB_WORKSPACE/artifacts (artifact storage is unavailable from this environment)."

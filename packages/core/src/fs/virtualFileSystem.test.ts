@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -41,6 +41,13 @@ async function diskUntouched(): Promise<void> {
 }
 
 describe("VirtualFileSystem", () => {
+  it("canonicalizes symlink ancestors of virtual files", async () => {
+    await symlink(`${root}/Mods/Pack`, `${root}/Game/linked`, "dir");
+    await vfs.mkdirp(`${root}/Game/linked/new`);
+    await vfs.writeFile(`${root}/Game/linked/new/file.txt`, new TextEncoder().encode("virtual"));
+    expect(await vfs.realpath(`${root}/Game/linked/new/file.txt`)).toBe(`${root}/Mods/Pack/new/file.txt`);
+  });
+
   it("is virtual and reads through to the base", async () => {
     expect(vfs.isVirtual).toBe(true);
     expect(await vfs.exists(`${root}/Mods/Pack/README.txt`)).toBe(true);

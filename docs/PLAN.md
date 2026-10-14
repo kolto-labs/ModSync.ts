@@ -35,7 +35,7 @@ All core source lives in `packages/core/src`. `index.ts` re-exports everything b
 `types.ts`, `guid.ts`, `defaults.ts`. See file for the domain model.
 
 ### `ports/` (done)
-`filesystem.ts` (`FileSystemPort`), `archive.ts` (`ArchiveReader`, `ArchiveOpener`).
+`filesystem.ts` (`FileSystemPort`, including optional `realpath` for canonical containment checks), `archive.ts` (`ArchiveReader`, `ArchiveOpener`).
 
 ### `fs/`
 - `paths.ts`
@@ -50,6 +50,7 @@ All core source lives in `packages/core/src`. `index.ts` re-exports everything b
 
 ### `archive/`
 - `index.ts`: `openArchive(path: string, opts?: { sevenZipPath?: string }): Promise<ArchiveReader>`, `detectArchiveFormat(path): Promise<ArchiveFormat | undefined>`, `isArchiveExtension(name)`.
+- Extraction accepts optional `beforeWrite` and `signal` hooks; ZIP streams directly, while RAR/7z codecs extract to private disk staging and stream each validated regular file to its destination. All native writes check canonical containment immediately before writing, and checkpoint predictions list output paths so partial cancelled extraction can be rolled back.
 - `zip.ts` (yauzl), `rar.ts` (node-unrar-js), `sevenZip.ts` (7z-wasm; with optional CLI fallback via `sevenZipPath`), `sfx.ts` (locate the `37 7A BC AF 27 1C` signature with chunked reads, hand the slice to the 7z adapter).
 
 ### `serialization/`
@@ -84,7 +85,7 @@ All core source lives in `packages/core/src`. `index.ts` re-exports everything b
 
 ### `checkpoints/`
 - `store.ts`: `class CheckpointStore { constructor(opts: { rootDir: string; kotorDirectory: string; fs?: FileSystemPort; anchorInterval?: number }); startSession(label): Promise<CheckpointSession>; create(session, meta: { label; modGuid?; instructionGuid?; touched: string[] }): Promise<CheckpointMeta>; list(): Promise<CheckpointSession[]>; restore(sessionId, checkpointId, onProgress?): Promise<void>; delete(sessionId): Promise<void> }`.
-  Layout: `<rootDir>/cas/<sha1[0..2]>/<sha1>` content blobs, `<rootDir>/sessions/<sessionId>/session.json`, `<rootDir>/sessions/<sessionId>/<index>.json` (anchor = full manifest of tracked files; non-anchor = delta list of `CheckpointFileEntry` changed vs previous). Restoring walks back to the nearest anchor then forward. Checkpoint 0 (baseline) stores only metadata plus hashes of files touched later (lazy: before a file is first overwritten/deleted, its current content is stored in the CAS).
+  Layout: `<rootDir>/cas/<sha1[0..2]>/<sha1>` content blobs, `<rootDir>/sessions/<sessionId>/session.json`, `<rootDir>/sessions/<sessionId>/<index>.json` (anchor = full manifest of tracked files; non-anchor = delta list of `CheckpointFileEntry` changed vs previous). Restoring walks back to the nearest anchor then forward using the session's recorded anchor interval. Session metadata, relative manifest paths, and SHA1 references are validated; restore preflights all blob hashes and canonical destination containment before changing game files. Patcher/Execute instructions snapshot existing game files before running and scan afterward to track opaque changes. Installation fails closed when a requested checkpoint session or baseline cannot be captured; checkpoint persistence failure marks the instruction failed and stops further work. The first failed mod stops guide execution. Preflight and setup errors emit both install-error and terminal install-finished events with a nonzero failed summary. Checkpoint 0 (baseline) stores only metadata plus hashes of files touched later (lazy: before a file is first overwritten/deleted, its current content is stored in the CAS).
 
 ### `downloads/`
 - `manager.ts`: `class DownloadManager extends EventEmitter` (`DownloadEvent`). `enqueue(modGuid, url, opts?)`, `start()`, `pause()`, `list()`. Direct HTTP with `fetch`, filename from `Content-Disposition` or URL, resume with Range, SHA1 on completion, `maxConcurrentDownloads`. Nexus: with `nexusApiKey` use the API (`/v1/games/{game}/mods/{id}/files/{fileId}/download_link.json`) else emit `download-needs-browser`. DeadlyStream and unknown hosts that return HTML emit `download-needs-browser`. `nxm://` links are opened via a callback (Vortex).
@@ -113,7 +114,7 @@ All core source lives in `packages/core/src`. `index.ts` re-exports everything b
 - `ssf.ts`: `readSsf`, `writeSsf`.
 - `erf.ts`: `readErf`, `writeErf` (ERF/MOD/SAV), `readRim`, `writeRim`, `Encapsulated { resources: { resref; type; data }[] }`.
 - `restypes.ts`: `ResourceType` table id<->extension.
-- `tslpatcher/`: `parseChangesIni(text): PatcherConfig`, `parseNamespacesIni(text): Namespace[]`, `class TslPatcher { constructor(opts: { tslpatchdataDir; gameDir; fs; logger; dryRun }); apply(config): Promise<PatcherLog> }` implementing TLKList, InstallList, 2DAList, GFFList, SSFList, and HACKList; CompileList emits a warning and installs precompiled `.ncs` from tslpatchdata when present. Backups written to `<gameDir>/backup/<timestamp>/` with `uninstall.rdf`-style listing (`modsync-uninstall.json`).
+- `tslpatcher/`: `parseChangesIni(text): PatcherConfig`, `parseNamespacesIni(text): Namespace[]`, `class TslPatcher { constructor(opts: { tslpatchdataDir; gameDir; fs; logger; dryRun }); apply(config): Promise<PatcherLog> }` implementing TLKList, InstallList, 2DAList, GFFList, SSFList, and HACKList; CompileList installs precompiled `.ncs` from tslpatchdata when present and no source memory substitutions require compilation; missing binaries or sources requiring substitution produce an error because a native compiler is not bundled. Backups written to `<gameDir>/backup/<timestamp>/` with `uninstall.rdf`-style listing (`modsync-uninstall.json`).
 
 ## Server API (`@modsync/server`)
 

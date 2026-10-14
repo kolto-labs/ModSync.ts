@@ -3,12 +3,11 @@
  *
  * Text encoding follows the header LanguageID: CP-1252 for 0-4 (English,
  * French, German, Italian, Spanish) and CP-1250 for 5 (Polish), both
- * implemented here with lookup tables. The East-Asian code pages (cp949 /
- * cp950 / cp936 / cp932 for languages 128-131) are multi-byte and are NOT
- * implemented: such files are decoded/encoded as CP-1252 (bytes preserved
- * byte-for-byte through a round trip) and a warning is reported through the
- * optional `warn` callback.
+ * implemented here with lookup tables. East Asian languages use iconv-lite's
+ * Windows code pages. Unknown languages and unrepresentable text are rejected
+ * instead of replacing text silently.
  */
+import iconv from "iconv-lite";
 import { BinaryReader, BinaryWriter, decodeCp1252, encodeCp1252 } from "./binary.js";
 
 export class TlkError extends Error {
@@ -20,6 +19,9 @@ export class TlkError extends Error {
 
 export interface TlkEntry {
   text: string;
+  /** Original entry metadata preserved when patching existing files. */
+  volumeVariance?: number;
+  pitchVariance?: number;
   /** sound resref, "" when none */
   soundResRef: string;
   /** sound length in seconds (written as 0 when absent) */
@@ -106,20 +108,47 @@ export function encodeCp1250(text: string): Uint8Array {
   return out;
 }
 
-/** True when the language's code page is implemented natively (0-5). */
+const EAST_ASIAN_ENCODINGS: Readonly<Record<number, string>> = {
+  128: "cp949",
+  129: "cp950",
+  130: "cp936",
+  131: "cp932",
+};
+
+/** True when the language's Windows code page is available. */
 export function isTlkLanguageSupported(language: number): boolean {
-  return language >= 0 && language <= 5;
+  return Number.isInteger(language) && ((language >= 0 && language <= 5) || EAST_ASIAN_ENCODINGS[language] !== undefined);
+}
+
+function checkLanguage(language: number): void {
+  if (!isTlkLanguageSupported(language)) throw new TlkError(`unsupported TLK language ${language}`);
 }
 
 export function tlkDecoder(language: number): (b: Uint8Array) => string {
-  return language === 5 ? decodeCp1250 : decodeCp1252;
+  checkLanguage(language);
+  const encoding = EAST_ASIAN_ENCODINGS[language];
+  if (!encoding) return language === 5 ? decodeCp1250 : decodeCp1252;
+  return (bytes) => {
+    const text = iconv.decode(Buffer.from(bytes), encoding);
+    // Reject malformed byte sequences instead of introducing replacement text.
+    if (text.includes("\ufffd")) throw new TlkError(`invalid ${encoding} TLK string data`);
+    return text;
+  };
 }
 export function tlkEncoder(language: number): (s: string) => Uint8Array {
-  return language === 5 ? encodeCp1250 : encodeCp1252;
+  checkLanguage(language);
+  const encoding = EAST_ASIAN_ENCODINGS[language];
+  const encode = encoding ? (text: string) => new Uint8Array(iconv.encode(text, encoding)) : language === 5 ? encodeCp1250 : encodeCp1252;
+  const decode = tlkDecoder(language);
+  return (text) => {
+    const bytes = encode(text);
+    if (decode(bytes) !== text) throw new TlkError(`text cannot be represented in TLK language ${language}`);
+    return bytes;
+  };
 }
 
 export interface TlkCodecOptions {
-  /** Called when the language's code page is not implemented (falls back to CP-1252). */
+  /** Optional codec diagnostics callback. Unsupported languages throw TlkError. */
   warn?: (message: string) => void;
 }
 
@@ -129,7 +158,7 @@ const FLAG_TEXT = 0x1;
 const FLAG_SOUND = 0x2;
 const FLAG_SOUND_LENGTH = 0x4;
 
-export function readTlk(bytes: Uint8Array, opts: TlkCodecOptions = {}): Tlk {
+export function readTlk(bytes: Uint8Array, _opts: TlkCodecOptions = {}): Tlk {
   if (bytes.length < HEADER_SIZE) throw new TlkError(`TLK too small (${bytes.length} bytes)`);
   const r = new BinaryReader(bytes);
   const sig = r.string(4);
@@ -138,17 +167,19 @@ export function readTlk(bytes: Uint8Array, opts: TlkCodecOptions = {}): Tlk {
   const language = r.u32();
   const count = r.u32();
   const entriesOffset = r.u32();
-  if (!isTlkLanguageSupported(language)) opts.warn?.(`TLK language ${language} uses an unsupported code page; decoding as CP-1252`);
+  checkLanguage(language);
   const decode = tlkDecoder(language);
   if (HEADER_SIZE + count * ENTRY_SIZE > bytes.length) throw new TlkError("TLK entry table exceeds file size");
+
+  if (entriesOffset < HEADER_SIZE + count * ENTRY_SIZE || entriesOffset > bytes.length) throw new TlkError("TLK string data offset overlaps the entry table or exceeds file size");
 
   const tlk = new Tlk(language);
   for (let i = 0; i < count; i++) {
     r.seek(HEADER_SIZE + i * ENTRY_SIZE);
     const flags = r.u32();
     const sound = r.fixedString(16);
-    r.u32(); // volume variance
-    r.u32(); // pitch variance
+    const volumeVariance = r.u32();
+    const pitchVariance = r.u32();
     const off = r.u32();
     const size = r.u32();
     const soundLength = r.f32();
@@ -159,14 +190,16 @@ export function readTlk(bytes: Uint8Array, opts: TlkCodecOptions = {}): Tlk {
       text = decode(bytes.subarray(start, start + size));
     }
     const entry: TlkEntry = { text, soundResRef: flags & FLAG_SOUND ? sound : "" };
+    if (volumeVariance !== 0) entry.volumeVariance = volumeVariance;
+    if (pitchVariance !== 0) entry.pitchVariance = pitchVariance;
     if (flags & FLAG_SOUND_LENGTH) entry.soundLength = soundLength;
     tlk.entries.push(entry);
   }
   return tlk;
 }
 
-export function writeTlk(tlk: Tlk, opts: TlkCodecOptions = {}): Uint8Array {
-  if (!isTlkLanguageSupported(tlk.language)) opts.warn?.(`TLK language ${tlk.language} uses an unsupported code page; encoding as CP-1252`);
+export function writeTlk(tlk: Tlk, _opts: TlkCodecOptions = {}): Uint8Array {
+  checkLanguage(tlk.language);
   const encode = tlkEncoder(tlk.language);
   const count = tlk.entries.length;
   const entriesOffset = HEADER_SIZE + count * ENTRY_SIZE;
@@ -179,7 +212,7 @@ export function writeTlk(tlk: Tlk, opts: TlkCodecOptions = {}): Uint8Array {
     const flags = FLAG_TEXT | (hasSound ? FLAG_SOUND | FLAG_SOUND_LENGTH : 0);
     w.u32(flags);
     w.fixedString(hasSound ? e.soundResRef : "", 16);
-    w.u32(0).u32(0);
+    w.u32(e.volumeVariance ?? 0).u32(e.pitchVariance ?? 0);
     w.u32(data.length).u32(enc.length);
     w.f32(hasSound ? (e.soundLength ?? 0) : 0);
     data.bytes(enc);

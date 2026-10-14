@@ -1,0 +1,2133 @@
+{
+  "corpusCommit": "21b2f0499d28ecd4ee2092701dee5792ba5da4b9",
+  "results": [
+    {
+      "game": "KOTOR1",
+      "lane": "fullmd-derived-synthetic-mechanical-install",
+      "componentCount": 197,
+      "instructionCount": 394,
+      "proofs": [
+        {
+          "path": "Override/component-0001.txt",
+          "sourceGuid": "eb3a5dc1-7e7d-50c3-a2fb-1b54aee37751",
+          "sourceName": "KOTOR Dialogue Fixes",
+          "sha256": "863d0810ab96f4efca6f5967542cfea3b29cbd1f9c4fd803c029c7d765e9b6ee"
+        },
+        {
+          "path": "Override/component-0002.txt",
+          "sourceGuid": "2b4fec78-8268-560c-9daf-07ba27f61bcd",
+          "sourceName": "Character Startup Changes",
+          "sha256": "652b48907c59305d789c2a492769501f0d762f5e4f16e3943831ba15fc5d8d55"
+        },
+        {
+          "path": "Override/component-0003.txt",
+          "sourceGuid": "512354de-2583-5d52-89f1-3463813b8505",
+          "sourceName": "Thematic KOTOR Companions",
+          "sha256": "c87774e62dc2616c78cfd5f6fabcbdc28465d27cb86697fe971f43f824c33549"
+        },
+        {
+          "path": "Override/component-0004.txt",
+          "sourceGuid": "172a906c-4803-57de-aa2b-4959f3f04bbf",
+          "sourceName": "JC's Minor Fixes",
+          "sha256": "5390541c1cdbe6a86e96ea9da1a62f64d86279d7435d5a220fd400e065b76cfd"
+        },
+        {
+          "path": "Override/component-0005.txt",
+          "sourceGuid": "10c40c88-f59e-5ed3-a87b-023f89d6fbc4",
+          "sourceName": "Ajunta Pall Appearance",
+          "sha256": "54b5952149f911c09fc54a5821954fa7ea02eae462c7a0e9a6308e3a446f95f8"
+        },
+        {
+          "path": "Override/component-0006.txt",
+          "sourceGuid": "77e41fdc-6142-54ce-b7c2-9f494e60fbce",
+          "sourceName": "KOTOR Community Patch",
+          "sha256": "959b61225728cf8aea14198465bc314f7d15e619a37ea190ef61534f354b6309"
+        },
+        {
+          "path": "Override/component-0007.txt",
+          "sourceGuid": "f7597a9b-6abe-50fd-9340-aba1b60376cc",
+          "sourceName": "Droid Claw Fix",
+          "sha256": "1d80a93d4264f751a057c7359e3c5cfd2c3617310221ffd463eb5c0be92df099"
+        },
+        {
+          "path": "Override/component-0008.txt",
+          "sourceGuid": "70d5145b-c286-54af-8a92-b786a1ea82bf",
+          "sourceName": "Ported VO Replacements",
+          "sha256": "b925c61788495a57d275d9af1a03845456ac362b272f2b7efdcf1c4b602d8acd"
+        },
+        {
+          "path": "Override/component-0009.txt",
+          "sourceGuid": "e01a446b-11fd-5b7b-a7d8-8dd106628674",
+          "sourceName": "Ultimate Korriban",
+          "sha256": "54bbcc37c12b7145eef9c5385c355aa9f895a3ec7b487ea871ac40b8a17363d0"
+        },
+        {
+          "path": "Override/component-0010.txt",
+          "sourceGuid": "02f43ef7-616a-5e42-a7a8-bb88e5d1f733",
+          "sourceName": "Ultimate Kashyyyk",
+          "sha256": "a8df7d0f180252feed9edd294a415b15d26254c4edf37e7fee3a0a8be1965dcb"
+        },
+        {
+          "path": "Override/component-0011.txt",
+          "sourceGuid": "2484495c-42a0-5691-ac6e-e04c2647a5c7",
+          "sourceName": "Ultimate Tatooine",
+          "sha256": "c1d268553fbd40d334431fc1d2513998aaa05fb95456afdcb67f8be60a62b564"
+        },
+        {
+          "path": "Override/component-0012.txt",
+          "sourceGuid": "7c3884fc-a06a-5e69-bb36-a12c056db661",
+          "sourceName": "Ultimate Dantooine",
+          "sha256": "c0cfae89b45adacb3636719588b5ce8a6eb34f63e06dfcfffe95ba2c9deaf593"
+        },
+        {
+          "path": "Override/component-0013.txt",
+          "sourceGuid": "838c5bde-750d-5af0-9c96-58b1a7b10aff",
+          "sourceName": "Ultimate Endar Spire +",
+          "sha256": "e38129659635220146043b1515e38095064f40debadd4a4eddd07462f45333cf"
+        },
+        {
+          "path": "Override/component-0014.txt",
+          "sourceGuid": "eec5004b-ea7f-5cea-98ae-be14ad25e41b",
+          "sourceName": "Ultimate Manaan",
+          "sha256": "cc4f01a3ac82cdc194633ad7efd700e5fc96f997878024dc2d6e16cb3af7e513"
+        },
+        {
+          "path": "Override/component-0015.txt",
+          "sourceGuid": "7dc39772-9a87-5693-9844-4837c78ea95c",
+          "sourceName": "Ultimate Taris",
+          "sha256": "7ea7c033095c32b281e75896235afda9cd7d74524e4d9b2aea47072b30aa9016"
+        },
+        {
+          "path": "Override/component-0016.txt",
+          "sourceGuid": "77cdad13-0b75-58f9-b921-1c8086815971",
+          "sourceName": "Ultimate Character Overhaul",
+          "sha256": "85103f4d41335ab47c1150071fcd9a8bb8a22486dd725ee74109a127c951a60d"
+        },
+        {
+          "path": "Override/component-0017.txt",
+          "sourceGuid": "852f33c2-6794-5f8e-b7c7-54d6a7446327",
+          "sourceName": "Ultimate Unknown World",
+          "sha256": "d55f5e74d02a6acbe08d32df691c8b602029d9bf9da8bf71e6702a80f9e6589a"
+        },
+        {
+          "path": "Override/component-0018.txt",
+          "sourceGuid": "eab6db56-cc6e-58f6-8f5c-f443ef54e56a",
+          "sourceName": "Korriban Sith Art",
+          "sha256": "335148f18df6212ad24fb59e30fd9d34ef45026fca9387f4c30303a9aa464f69"
+        },
+        {
+          "path": "Override/component-0019.txt",
+          "sourceGuid": "7f7cf3af-92f6-509d-82ca-9d338526d24e",
+          "sourceName": "Duncan on Manaan",
+          "sha256": "a47c444782e9e021e4ce604b04c834c4712c7195a091e6e53e4cc99d3db8a14b"
+        },
+        {
+          "path": "Override/component-0020.txt",
+          "sourceGuid": "510a51ab-09d7-59eb-8afa-2550d1d088b1",
+          "sourceName": "Consistent Conditioning",
+          "sha256": "8b6d71b001c7599e2bb611f10ec1f4ba16a6f4937ba270c1caf7fd9746c80419"
+        },
+        {
+          "path": "Override/component-0021.txt",
+          "sourceGuid": "9297d024-83bf-5180-957b-a7d502726cc9",
+          "sourceName": "HD Pazaak Cards",
+          "sha256": "f07d09a3fabba7d2e076a62fdc5faee0f0e5a4c34a593816ab94e22497ea7842"
+        },
+        {
+          "path": "Override/component-0022.txt",
+          "sourceGuid": "f2877144-3c80-54cb-9410-c6ed3bcd00a1",
+          "sourceName": "HD PC Portraits",
+          "sha256": "65f14e16138843ec5d9f2e34905e6924bcbd4ef58602782e3991ef1c9f8b57e2"
+        },
+        {
+          "path": "Override/component-0023.txt",
+          "sourceGuid": "f9542f7b-42ad-5bee-9e5a-acd33b4c4c44",
+          "sourceName": "PMHA05 HD",
+          "sha256": "12a3ed451fdb4f2f8bcf28c5e91bcf44cd1b8353ce8820059086b58ecb0a29b7"
+        },
+        {
+          "path": "Override/component-0024.txt",
+          "sourceGuid": "5cabdf51-a054-5bc4-9790-ca9cc959056f",
+          "sourceName": "PMHA02 HD",
+          "sha256": "b45b0d7bfa4cca4208a22f708e4d580a3301b3f149917dd230556d9084aa3062"
+        },
+        {
+          "path": "Override/component-0025.txt",
+          "sourceGuid": "a1cbb927-feec-5705-a745-77148e0beceb",
+          "sourceName": "PMHA01 HD",
+          "sha256": "626b4dae5dd3562246f306f731a0bcea1f7d39fb228af9fe4c5208f4fadb8b51"
+        },
+        {
+          "path": "Override/component-0026.txt",
+          "sourceGuid": "372ab59f-453a-58d2-ad29-692bf920bdd3",
+          "sourceName": "PFHC05 HD",
+          "sha256": "8e4675a57e061be091c0c79cc6dd03bdfdbfb214f6d905c773e8460886374cde"
+        },
+        {
+          "path": "Override/component-0027.txt",
+          "sourceGuid": "e5ce44f9-9cad-5921-9455-9346dc4cab75",
+          "sourceName": "PFHB02 Eye Fix",
+          "sha256": "690fb4ae74f8f8dc1527e1762b171071e99b799017d163217a5a3463c71e2ed4"
+        },
+        {
+          "path": "Override/component-0028.txt",
+          "sourceGuid": "5832ad1e-ced6-54ea-9b80-40697ec2437a",
+          "sourceName": "High-Poly Grenades",
+          "sha256": "55d7cdff3571e73f310cb1065cf4b8faaf577f24642019dd1625b86b68522d4f"
+        },
+        {
+          "path": "Override/component-0029.txt",
+          "sourceGuid": "81a24295-e5de-53b7-a3e6-aff5a57fe690",
+          "sourceName": "HD Gizka",
+          "sha256": "bafbb2e9d565ad95830abe27113e26822bb58e713f5c4f4a470b38c105d4b3c6"
+        },
+        {
+          "path": "Override/component-0030.txt",
+          "sourceGuid": "20f8ba29-968e-571e-a03d-2054eadcf558",
+          "sourceName": "Gammorean Reskin Pack",
+          "sha256": "f3fbc0397be05782eb3f9926781e1246b90e4e88a7e48cf6063ce0c51a32261e"
+        },
+        {
+          "path": "Override/component-0031.txt",
+          "sourceGuid": "95f6ab96-5fc7-5765-80b6-9054baee87c9",
+          "sourceName": "War Droids HD",
+          "sha256": "3c0a1e161fb45270abeab578bb1ef44b1f701e7eb3a9cd3a0316044d53fc2c6f"
+        },
+        {
+          "path": "Override/component-0032.txt",
+          "sourceGuid": "71a7ccab-afa2-5ef7-876a-19ecc0eddd90",
+          "sourceName": "HD Cleaning Droids",
+          "sha256": "262f77f1c7c88c0f834702a07b7ed218cc5f51d9f95d0ccfdc652c35036feaff"
+        },
+        {
+          "path": "Override/component-0033.txt",
+          "sourceGuid": "5b5e956f-f2b9-575d-90a3-aa489a233e5e",
+          "sourceName": "HD Jawas",
+          "sha256": "ce45aaff90706c84cdb530c9974212c9ec7a79df383abadf65c21528f1a80389"
+        },
+        {
+          "path": "Override/component-0034.txt",
+          "sourceGuid": "0417d5d6-1115-563b-a2ae-050fa108061f",
+          "sourceName": "HD Sand People",
+          "sha256": "08647a739c720b27bf8224b0a471534e05198e250fae6644c486981041db5762"
+        },
+        {
+          "path": "Override/component-0035.txt",
+          "sourceGuid": "36ea92bd-b42b-5817-bc05-0ea7fdb50650",
+          "sourceName": "Better Twi'lek Heads",
+          "sha256": "6cf2709af43aa8293cdee742c476ad2bdc5273e8b82aadd479f03c018da5c027"
+        },
+        {
+          "path": "Override/component-0036.txt",
+          "sourceGuid": "da798dcd-9a5f-5947-8311-59c772671a87",
+          "sourceName": "HD Twi'lek Females",
+          "sha256": "b11896dc6324198e0a8080acffb14af4d490f1c8cd0173d2e52bec392f793c2d"
+        },
+        {
+          "path": "Override/component-0037.txt",
+          "sourceGuid": "ec0a86e3-3a95-5880-bb73-917ccbe71ff2",
+          "sourceName": "Thigh-High Boots for Twi'lek",
+          "sha256": "04df781c3440271c27ce1c3fcd00a4d80b3ee3acf954fc4fe448c7544a88d6af"
+        },
+        {
+          "path": "Override/component-0038.txt",
+          "sourceGuid": "0a199fba-e6df-5dee-a163-d6db25c5122e",
+          "sourceName": "Shaleena/Lashowe Mouth Fix",
+          "sha256": "e119e8684ec345bcea43d1c5f8888d72f97b4e650afc0aee40b167b87c0f9599"
+        },
+        {
+          "path": "Override/component-0039.txt",
+          "sourceGuid": "9343264c-48c1-5986-a624-6e08643a4a73",
+          "sourceName": "Calo Nord Recolor",
+          "sha256": "563738720e7b18c744aae86211df9a77a62a9011da1ae00ab0e28f0a6a962c28"
+        },
+        {
+          "path": "Override/component-0040.txt",
+          "sourceGuid": "c73ab802-124a-52aa-9684-0b71912b48a0",
+          "sourceName": "HD Darth Malak",
+          "sha256": "aa3b56bea73a0eaac0e34a08a0a5632c2d8b8c9c117e33c3d8af9fad8b226144"
+        },
+        {
+          "path": "Override/component-0041.txt",
+          "sourceGuid": "b2bf1980-47fe-5dcc-ae3a-4fba6d0ebc22",
+          "sourceName": "CineMalak",
+          "sha256": "b93d69bbe1a06511c4213346fa43fb962ae4a372ad13069deb4f3ae010149d00"
+        },
+        {
+          "path": "Override/component-0042.txt",
+          "sourceGuid": "6a17d1a4-9bec-5e3d-a62a-af1798c78af2",
+          "sourceName": "Detran's Darth Revan",
+          "sha256": "9d39ec004e97fd43805c68f32a6e8335c3f2560c0d175383af45ed5f41676e8b"
+        },
+        {
+          "path": "Override/component-0043.txt",
+          "sourceGuid": "9e2fdfe6-8b08-57ec-b9df-1c755a92a227",
+          "sourceName": "Darth Bandon HD",
+          "sha256": "4281d218b4296cadf4681a294a0bb5d422360c947c6f24156dac19ccae5c773e"
+        },
+        {
+          "path": "Override/component-0044.txt",
+          "sourceGuid": "798278f3-815f-50ea-a29a-59aa5ba6a397",
+          "sourceName": "HD Vrook",
+          "sha256": "0df5dc5386a51ad29e86104df068bf82e417341c8133475caaa667caade3c950"
+        },
+        {
+          "path": "Override/component-0045.txt",
+          "sourceGuid": "5c055e4d-7bbd-5933-9eb9-ee9fac1c336d",
+          "sourceName": "HD UI Elements",
+          "sha256": "368e9e0c717e4d89820dd6ba9e8aff9d370144825bc0b3c9b8ab0e02997d7a32"
+        },
+        {
+          "path": "Override/component-0046.txt",
+          "sourceGuid": "a5219126-69ca-5cac-8219-cbf929843a7d",
+          "sourceName": "HD NPC Portraits",
+          "sha256": "a627e0c165a394916ca4f6430e145cba93dd7ccd8a0efbe536522991a68747c9"
+        },
+        {
+          "path": "Override/component-0047.txt",
+          "sourceGuid": "9791c0c9-de51-549b-b645-a0759673c918",
+          "sourceName": "Male NPC Clothing",
+          "sha256": "8fbdbafcc9e9b3598f9e138e252f1134ee48c9c3ad437a5ed9b59a23e1bf0647"
+        },
+        {
+          "path": "Override/component-0048.txt",
+          "sourceGuid": "7f34347f-0c31-5144-920b-d5531659787f",
+          "sourceName": "Juhani Appearance Overhaul",
+          "sha256": "fc2a8086b494a1e8bad1ff5d0782cedc479a62c4d0a172b338c5959a834dbafe"
+        },
+        {
+          "path": "Override/component-0049.txt",
+          "sourceGuid": "51f9a1c3-e036-55ca-9a1c-214f38132de9",
+          "sourceName": "Juhani Cathar Head",
+          "sha256": "504960e7059d0d95fbaf53cb576cf0ca77316377d531e472df7dab0f5fe05aea"
+        },
+        {
+          "path": "Override/component-0050.txt",
+          "sourceGuid": "ee2f9fab-0b2e-5f70-a111-a55cda0be269",
+          "sourceName": "Korriban: Back in Black",
+          "sha256": "9d74d12dd569430a09cba9a3f90b20697855600258fa425cd29416348653eea7"
+        },
+        {
+          "path": "Override/component-0051.txt",
+          "sourceGuid": "23be3bf5-12fd-5153-9153-bc35db18d448",
+          "sourceName": "Cloaked Jedi Robes",
+          "sha256": "3ff6af1e330424c91dcccf03a95cc88c33cc128acf6b4481f61f2b072d2c22d9"
+        },
+        {
+          "path": "Override/component-0052.txt",
+          "sourceGuid": "fb72002f-7270-5854-83b5-2b04722d64f1",
+          "sourceName": "JC's Jedi Tailor",
+          "sha256": "1b4d8ca502b64ef78f0158d35e1334d7cf9703686a3684f8e58b356db5584d60"
+        },
+        {
+          "path": "Override/component-0053.txt",
+          "sourceGuid": "b7e7b758-36d6-5b8f-a140-f13fa9a33df4",
+          "sourceName": "Cloaks with Shadows",
+          "sha256": "23d2db61e737b2b30ef8850027f90c19f498f9e4f4163519e50d8a07b52037c7"
+        },
+        {
+          "path": "Override/component-0054.txt",
+          "sourceGuid": "bbef204b-70f6-5797-ab6c-1d5187bf27a1",
+          "sourceName": "Qel-Droma Reskin",
+          "sha256": "212e73dfef644cd22a10fb4c651fafd33d07ea96f9c2ceab0874d84506f57c74"
+        },
+        {
+          "path": "Override/component-0055.txt",
+          "sourceGuid": "46b35c0a-8e9a-5ec6-ba41-211847b4bff6",
+          "sourceName": "Quanon's HK-47",
+          "sha256": "d47c38125f424db53d51766c231d33378bc49a93783e055d3607d7be62997886"
+        },
+        {
+          "path": "Override/component-0056.txt",
+          "sourceGuid": "c66d571d-930c-5e2c-aebf-cf62af3a8976",
+          "sourceName": "HD Sign Placeable",
+          "sha256": "74bd191d21e850b79e2c5f22d7dd5ad6180b2625fdd669fa5acd989c139508a3"
+        },
+        {
+          "path": "Override/component-0057.txt",
+          "sourceGuid": "6e2e80d5-e347-59df-9e89-32d06157130d",
+          "sourceName": "HD Kiosk",
+          "sha256": "27aa3cdf5eeee96390249029b9020c2c777ce0f5c5d86a01597c9ffb9f060a29"
+        },
+        {
+          "path": "Override/component-0058.txt",
+          "sourceGuid": "ab8aa659-28ba-5ab1-b920-92d45e298e55",
+          "sourceName": "HD Desk",
+          "sha256": "df6721dd587af8f997d787699f625724750fa16be04310f2931cf38d247e0574"
+        },
+        {
+          "path": "Override/component-0059.txt",
+          "sourceGuid": "221d2fe4-aefc-5156-bfe5-05c71a6bf052",
+          "sourceName": "HD Escape Pod",
+          "sha256": "66b0a52ef44693de3684d576e1481a32e9277cf4e7f366c607bb4d76e593718c"
+        },
+        {
+          "path": "Override/component-0060.txt",
+          "sourceGuid": "388fb525-9366-5dce-bed3-e70bb8148cb4",
+          "sourceName": "HD Weapon Placeables",
+          "sha256": "22cfacab3e7053a63c4d6ce4c1cb815e044ff67c01653e23d12497c49aa9da7f"
+        },
+        {
+          "path": "Override/component-0061.txt",
+          "sourceGuid": "a0061712-3871-57c5-baf3-a175af5c3b71",
+          "sourceName": "K2 Swoops to K1",
+          "sha256": "7cf4e1149a71e2ba3faee6f8d9227d38622f33bcba18166e9a9c027dee7b76ff"
+        },
+        {
+          "path": "Override/component-0062.txt",
+          "sourceGuid": "bdbf4b10-d600-5cd8-860f-30a09a978cd0",
+          "sourceName": "HD Stun Batons",
+          "sha256": "cfa57d2b4e7a1b29593e5db56db99c7075124b8830bed59420a0a24a060d966c"
+        },
+        {
+          "path": "Override/component-0063.txt",
+          "sourceGuid": "3704e53d-d315-57b9-83e1-e647d99cca2a",
+          "sourceName": "Unique Sith Governor",
+          "sha256": "8901f073508a16e50689918243c14553affa408594acace245c7e8b4a3e31a60"
+        },
+        {
+          "path": "Override/component-0064.txt",
+          "sourceGuid": "8a5c33c8-e6d5-5d86-9ba3-f54a28ca5d71",
+          "sourceName": "HD Ithorians",
+          "sha256": "06f9751ae54f39298534cc6e2f05677d664eac132abdd86ecd193713fae2a533"
+        },
+        {
+          "path": "Override/component-0065.txt",
+          "sourceGuid": "738c9d7a-4b94-58e0-b0e2-a20eff38ff88",
+          "sourceName": "HD Duros",
+          "sha256": "cdb751763b76788f3a766cfe61b8b25d82a193e492c355f51fbddcf19f581e70"
+        },
+        {
+          "path": "Override/component-0066.txt",
+          "sourceGuid": "589729bf-2a5c-5212-a07a-78ef37afb8d9",
+          "sourceName": "HD Quarren",
+          "sha256": "7431bdb53e55bbf31f3c7e65e1b32831d51e3d5dd65607362fdcb16fd01a4109"
+        },
+        {
+          "path": "Override/component-0067.txt",
+          "sourceGuid": "ee2a490c-1d6c-5872-b035-781e8240c429",
+          "sourceName": "HD Davik",
+          "sha256": "fa2afd362cd09105d48866f10760b1578c6e0595896f43b05c5384fbe75578bb"
+        },
+        {
+          "path": "Override/component-0068.txt",
+          "sourceGuid": "dee1b935-9bf0-5c36-a584-63375f6d5a2e",
+          "sourceName": "HD Doctors",
+          "sha256": "ce82ab264547250801c225377dae03b883e93cad98930fa2603d43775a30162b"
+        },
+        {
+          "path": "Override/component-0069.txt",
+          "sourceGuid": "565323b8-7cc5-5909-9503-79214e1b2b39",
+          "sourceName": "Kebla Yurt HD",
+          "sha256": "f5de0725193783a37ef43a363dd9b5f48710f174e8efae5c33a7fac03d58acb0"
+        },
+        {
+          "path": "Override/component-0070.txt",
+          "sourceGuid": "0a72d6e7-d864-58c8-9dfe-6b3e74dcd32c",
+          "sourceName": "HD Deadeye Duncan",
+          "sha256": "1ee6fa79bb7eb31876e3664505495da31ebaafec0aa7517a10f058bd12aee753"
+        },
+        {
+          "path": "Override/component-0071.txt",
+          "sourceGuid": "5175f6fa-3ca5-585e-b25f-6562053bc545",
+          "sourceName": "N_oldAMH01 HD",
+          "sha256": "19f5699841a9af12074a6ddfd56664918fcd3ce47ad68da9b7922a2f8504e486"
+        },
+        {
+          "path": "Override/component-0072.txt",
+          "sourceGuid": "5ae80c17-0740-5fed-bec7-ab5426b5b030",
+          "sourceName": "HD Astromech Droids",
+          "sha256": "0f9c3dc732f15460428de55ac0ded9e6ea5347ab4628014de498105a5ddf5bbb"
+        },
+        {
+          "path": "Override/component-0073.txt",
+          "sourceGuid": "10cfe3a6-2ac8-58a5-81c2-9bd3710a3b02",
+          "sourceName": "HD Protocol Droids",
+          "sha256": "4fda80b4e8639f1904fe14f434f655d19648ce1728abbf4023a599e8e98f2246"
+        },
+        {
+          "path": "Override/component-0074.txt",
+          "sourceGuid": "0ce81011-62b6-5395-b260-1a1f340e9196",
+          "sourceName": "Davik's Trophies",
+          "sha256": "1701e118b3ecf757c9cd49c63b7eca69aa0ac443584954ac868a9a64d03b0f1b"
+        },
+        {
+          "path": "Override/component-0075.txt",
+          "sourceGuid": "7e86d120-73ed-59f2-a6d4-141eaa8eca44",
+          "sourceName": "HD Carth Onasi",
+          "sha256": "cb8d8d7c073f94f74d89edd5c6540127a1dfc8bad3391329e0636999b6374618"
+        },
+        {
+          "path": "Override/component-0076.txt",
+          "sourceGuid": "dd8d6747-88ea-52b6-ab9a-a63beea39cd6",
+          "sourceName": "HD Canderous Ordo",
+          "sha256": "d9cc0edb89163c032157812b7b88f301f606b3b551676e91b1c1ea146fa1daa1"
+        },
+        {
+          "path": "Override/component-0077.txt",
+          "sourceGuid": "ef55acd1-a306-5c68-94f1-71f8c80a0921",
+          "sourceName": "Quanon's Canderous",
+          "sha256": "c02f414cbe80e9d9263aab817ef3f5319c619707858568567917d558c42e658b"
+        },
+        {
+          "path": "Override/component-0078.txt",
+          "sourceGuid": "42b4c0f6-be99-5240-bbe4-f99074a82be6",
+          "sourceName": "Jolee HD",
+          "sha256": "d15f992bd2729c60e04789fc03647bd4be5f6a42b593e1818d59199b967d6b5c"
+        },
+        {
+          "path": "Override/component-0079.txt",
+          "sourceGuid": "10c7ba12-9952-5604-b9e0-c9d469a9bff3",
+          "sourceName": "Fen's Jolee",
+          "sha256": "37aa3b5080d91451d5661ff9d5561096f041d7a73f01e2887af156e0b7254941"
+        },
+        {
+          "path": "Override/component-0080.txt",
+          "sourceGuid": "8f8992fb-e7af-5e2a-9c73-7edd6db872cf",
+          "sourceName": "Zaalbar HD",
+          "sha256": "d0ef711a94b453b36146f54a74d6435d26e43fdd1a71aba5a5ba9a2d001347e2"
+        },
+        {
+          "path": "Override/component-0081.txt",
+          "sourceGuid": "77f0c110-ddfd-50fc-ac6f-6a91e1ce78f4",
+          "sourceName": "Sith Uniform Reformation Revised",
+          "sha256": "ea217a0f8c68a0b70e22e28fa1fea0459d247c347f3460c4b82eae191900f752"
+        },
+        {
+          "path": "Override/component-0082.txt",
+          "sourceGuid": "62426af4-236d-5d0a-a49c-1cb381ad4784",
+          "sourceName": "Stylized Portraits",
+          "sha256": "c9d38dabff3c60f33cd338e9e0557865d2882e09eccae2a2bcebfdae2ee6c512"
+        },
+        {
+          "path": "Override/component-0083.txt",
+          "sourceGuid": "8c788531-6ef1-56a7-9361-6e015b5f8c2f",
+          "sourceName": "Star Map Revamp",
+          "sha256": "1543060ebec6f12c14b01782b6ceccb9fd7c4e1bb0ed8c39d69455b243c60b44"
+        },
+        {
+          "path": "Override/component-0084.txt",
+          "sourceGuid": "d28d9dd0-1769-5f73-8693-25b043b82387",
+          "sourceName": "Background Improvements",
+          "sha256": "867004d8aba74bf75cec97c720e0137962fe6bfd4992c44c23d5d7235a1282d4"
+        },
+        {
+          "path": "Override/component-0085.txt",
+          "sourceGuid": "774a212b-4bea-5e3f-a3ee-b2922bbffc78",
+          "sourceName": "Kebla Yurt Renovation",
+          "sha256": "5a2c351fecaee002056f5c8bff4dce7f556501532bd71559c500ff6bea7cf4d7"
+        },
+        {
+          "path": "Override/component-0086.txt",
+          "sourceGuid": "ffbbe2a3-b987-5d44-8376-4ff49f1e45f2",
+          "sourceName": "Hi-Res Ebon Hawk",
+          "sha256": "0ab537f4bab6a76134238165e5fd3627968734dd82eb8629001b35f9d3438410"
+        },
+        {
+          "path": "Override/component-0087.txt",
+          "sourceGuid": "cdfa1fc5-c0d9-5317-a2a9-251747503674",
+          "sourceName": "Ebon Hawk Repairs",
+          "sha256": "17e47c7c4b22fbbc8af3423b8422e7b3b05aeca7f3ccdce70d93b9fe83329dcd"
+        },
+        {
+          "path": "Override/component-0088.txt",
+          "sourceGuid": "28cd6a19-4385-5064-994f-9013c090dd3b",
+          "sourceName": "HQ Cockpit Skyboxes",
+          "sha256": "86d5f083fc7acc719e4610e165d5ad38a8b1adcebd278d2cdb8b19e1b5f4f725"
+        },
+        {
+          "path": "Override/component-0089.txt",
+          "sourceGuid": "64f209d9-dac6-50c9-87f1-3cd6be7f5341",
+          "sourceName": "Yavin Station Hangar",
+          "sha256": "aa35b05ce7eefdf47fab447d84ab8eda3df24b4247f73b657e9b7916dc5141d0"
+        },
+        {
+          "path": "Override/component-0090.txt",
+          "sourceGuid": "71b6a015-ed9d-532c-b273-32cb1b6972dd",
+          "sourceName": "Ebon Hawk Cockpit Upgrade I",
+          "sha256": "6563e8f1638d3581b733beac25c65aabf894aa2ac6aefc2fc4355ddf1baa50ba"
+        },
+        {
+          "path": "Override/component-0091.txt",
+          "sourceGuid": "8c9f604f-656d-576b-aa32-a742f795f69c",
+          "sourceName": "Ebon Hawk Cockpit Upgrade II",
+          "sha256": "57c534af203ccf292f8cab8c8f5ed634560124d1d42d991052b5b46ddb7d5b68"
+        },
+        {
+          "path": "Override/component-0092.txt",
+          "sourceGuid": "49631b9e-48ca-5d62-a635-c64d902c1c7b",
+          "sourceName": "Taris Reskin",
+          "sha256": "f49fe38800265512f02fcb939b8f9707685f40d2b1641fad765ca58849fde43c"
+        },
+        {
+          "path": "Override/component-0093.txt",
+          "sourceGuid": "c0b3aa61-55f3-50f4-aaa2-4ef3bb6569fd",
+          "sourceName": "High Quality Starfields",
+          "sha256": "ec3cd1ccffe5c76df46f01cef19ddd7e7888ee394fdcb7fad0653c1fc086dadf"
+        },
+        {
+          "path": "Override/component-0094.txt",
+          "sourceGuid": "3b9c63fd-e493-59c7-82fd-2e902c410731",
+          "sourceName": "HQ Skyboxes II",
+          "sha256": "ba21d41999fb5cf3a1a68bf2d3f6d8ca98209ea5387f0df50f9d71cf2f51b6fc"
+        },
+        {
+          "path": "Override/component-0095.txt",
+          "sourceGuid": "d1ade251-9e68-5d4b-8fe6-d7c20d284f81",
+          "sourceName": "Ebon Hawk Transparent Cockpit Windows",
+          "sha256": "1f262dbb95c9010d65ad140f5a58c04e7082ad1e5deaa22f95460d2379f0cd8e"
+        },
+        {
+          "path": "Override/component-0096.txt",
+          "sourceGuid": "a3998f48-7b97-5c72-b405-f04f46d0270e",
+          "sourceName": "Hires Beam Effects",
+          "sha256": "dc2390d5ea50ba6843b5855f8c5b703aeaffe870187a5f2e3dad987bdbba62a5"
+        },
+        {
+          "path": "Override/component-0097.txt",
+          "sourceGuid": "6af6c77d-cb96-5a8c-ad31-84344589bb89",
+          "sourceName": "HD Fire & Ice",
+          "sha256": "a9f96c4997ccaca60e93f32f6d34a59419bfd12069e2c885807c0f7b4b96da17"
+        },
+        {
+          "path": "Override/component-0098.txt",
+          "sourceGuid": "4d979153-fb19-5664-acea-dddc546902fd",
+          "sourceName": "Animated Energy Shields",
+          "sha256": "672c8e5eba7ab0fd2c05620982524b2541403f4c4332ff6d7b796db56047fea4"
+        },
+        {
+          "path": "Override/component-0099.txt",
+          "sourceGuid": "93955245-a046-5a4a-91f2-3c6a6691c0de",
+          "sourceName": "Animated Cantina Sign",
+          "sha256": "7a0b78b3f86c93ef6ceccd586724628426f2357a0283c7b044229b07cb330ae4"
+        },
+        {
+          "path": "Override/component-0100.txt",
+          "sourceGuid": "c1098e93-8fcf-54b4-81b7-4572881680ee",
+          "sourceName": "Revamped FX",
+          "sha256": "07880773c240a5ea833e74c1e2f4fe05d8e3471da2d86fb2cf3af8a3c127e71f"
+        },
+        {
+          "path": "Override/component-0101.txt",
+          "sourceGuid": "5ae9906c-bcf8-5a65-8636-10c35f58b072",
+          "sourceName": "Terminal Texture",
+          "sha256": "2db03743c48303558734b78ad2076ed175d340c30b38d250b9e9eb2948a1bfa8"
+        },
+        {
+          "path": "Override/component-0102.txt",
+          "sourceGuid": "9c04941a-de0d-50a1-b1db-18d460f9af1c",
+          "sourceName": "HD Workbench",
+          "sha256": "8179ef3884349a46f49adbd190701badf3decff57067d95fc3d904df1efe9e15"
+        },
+        {
+          "path": "Override/component-0103.txt",
+          "sourceGuid": "7dcc9f5c-8cf4-5495-b469-c5ae5cf7a3dc",
+          "sourceName": "Animated Swoop Monitors",
+          "sha256": "869ca0b01bf4d4dfaa7448230fc09f7e01b142b357b27fe4c58ac9e42285084d"
+        },
+        {
+          "path": "Override/component-0104.txt",
+          "sourceGuid": "66b1f565-0477-59a3-b93a-0c5f72c84a00",
+          "sourceName": "Loadscreens in Color",
+          "sha256": "e7058c2bf62af1be1a8d5c6798b2fa2ac8eb7a1bbabb49f68ba446a35e219c27"
+        },
+        {
+          "path": "Override/component-0105.txt",
+          "sourceGuid": "0ae9b806-1788-5606-85a9-5427a223c16d",
+          "sourceName": "Reflective Lightsaber Blades",
+          "sha256": "8911d23e2287c410e3aad899136855f653ae0874608d6a689d035d18ecbdb33b"
+        },
+        {
+          "path": "Override/component-0106.txt",
+          "sourceGuid": "4749913a-8064-5ae8-a1c8-f47e9b59b630",
+          "sourceName": "Darth Malak's Lightsaber",
+          "sha256": "5c9872bd9b6875b555d773a261f84dc09662d91cb8810db035f46ac2709b3c13"
+        },
+        {
+          "path": "Override/component-0107.txt",
+          "sourceGuid": "85f7c208-ecb7-5b39-baac-1f423f346f0e",
+          "sourceName": "Blaster Visual Effects",
+          "sha256": "81163416700db2f24b0cf0407cdbfedbb2b050c0c602cb85bddc56d85c560d7b"
+        },
+        {
+          "path": "Override/component-0108.txt",
+          "sourceGuid": "c0a2fe51-6849-53a6-bd45-8b0bff96ae34",
+          "sourceName": "Wookiee Warblade Fix",
+          "sha256": "5b43e59b616aa35c3b9b7145fdfbfa1b6517a8419f251e224e8f785399faff25"
+        },
+        {
+          "path": "Override/component-0109.txt",
+          "sourceGuid": "33f72c10-e59d-5dad-b766-eadace9c33fc",
+          "sourceName": "Kill The Czerka Guard",
+          "sha256": "1a83dafe1eddf00bf57eb1a7a570209968b0163b010c2deb65842e4e7db4fd33"
+        },
+        {
+          "path": "Override/component-0110.txt",
+          "sourceGuid": "a4d51478-897f-5fcb-933f-c3fde997f39e",
+          "sourceName": "Korriban Workbench",
+          "sha256": "7d0ad6f802d6cf655f49a2bf38c2951dc5e358aeb1a75498e48e653c307bb828"
+        },
+        {
+          "path": "Override/component-0111.txt",
+          "sourceGuid": "f025ed96-b572-52f8-b85c-6c9d8287cb94",
+          "sourceName": "Senni Vek Mod",
+          "sha256": "66b2ace73021e8ed580e957823e0744e9f893b8795947e11433ed5f260295abf"
+        },
+        {
+          "path": "Override/component-0112.txt",
+          "sourceGuid": "884e1954-af6d-503f-ab1a-48c2107d5c2f",
+          "sourceName": "Male Twi'lek Diversity",
+          "sha256": "d13cce4f75b02584e286770eb2dbdef7c10d554330f618001dc0bc934196cbfe"
+        },
+        {
+          "path": "Override/component-0113.txt",
+          "sourceGuid": "ec9a333e-9a5c-54b9-8a65-2af5486f714e",
+          "sourceName": "Ixgil the Bith",
+          "sha256": "a4c3302f97e546b9b407e8c1cac06845f18edaa02c28c41918d75e5e18e57a59"
+        },
+        {
+          "path": "Override/component-0114.txt",
+          "sourceGuid": "748b8406-6bf1-5f4d-86dc-074a2700445d",
+          "sourceName": "Hidden Bek Control Room",
+          "sha256": "be6a0831ef9ccd3f4f6c40bfbdf9773e072f3bf475f0a6146ea3b3844e1f31a5"
+        },
+        {
+          "path": "Override/component-0115.txt",
+          "sourceGuid": "6ee1b84a-d10b-58a4-a98e-833f2758ecf1",
+          "sourceName": "Swoop Bike Upgrades",
+          "sha256": "317597fd54b7a8e3a295ee9aca7ef936de7b7bdae377f000a479acbf7c881e06"
+        },
+        {
+          "path": "Override/component-0116.txt",
+          "sourceGuid": "0846491e-8b7f-5063-9175-ea5c2b6deef6",
+          "sourceName": "Jedi Choice Dialogue Enhancement",
+          "sha256": "f33f2c256d35b88f317168e7b1bebb6f6bb27e1ad7bf1fcc374255536c01d5d0"
+        },
+        {
+          "path": "Override/component-0117.txt",
+          "sourceGuid": "6ac4fb7e-4607-5bac-9cd0-c536d8414034",
+          "sourceName": "Juhani Restoration",
+          "sha256": "da832aac67ccc3ce6bc712a7d024ac1ed9f9c6b175a7cca21e982a19a93cf9fb"
+        },
+        {
+          "path": "Override/component-0118.txt",
+          "sourceGuid": "6fb4489c-47cf-5a58-8e79-c0f519ca2ae7",
+          "sourceName": "Vision Enhancement",
+          "sha256": "a4b92e3a667a96456aa197ac9711c8afa76b476843e881c8cebd3166072f6c96"
+        },
+        {
+          "path": "Override/component-0119.txt",
+          "sourceGuid": "4249056d-fc33-5296-b9f5-01020632e4fe",
+          "sourceName": "New Leviathan Dialogue",
+          "sha256": "ff5e596078d361f1fa9124ed106ae960cb5eaefd0711678d4a99c871f8881cec"
+        },
+        {
+          "path": "Override/component-0120.txt",
+          "sourceGuid": "73acffd5-3fb2-5857-b677-c1b2c6b74dd3",
+          "sourceName": "Balanced Pazaak",
+          "sha256": "88882cc0b8077fbf79ce895ad31485e6f2175650344684cbd98a6f145eaa9542"
+        },
+        {
+          "path": "Override/component-0121.txt",
+          "sourceGuid": "d9cb564a-2bae-5501-af12-25839b67fd02",
+          "sourceName": "Camera Replacement",
+          "sha256": "aefa5be3e0af43d9a23516313ae0fb4c62bd101281efca600a4bf5c982afff9d"
+        },
+        {
+          "path": "Override/component-0122.txt",
+          "sourceGuid": "b579aa88-7ff8-5503-87e9-56777e0e0fc3",
+          "sourceName": "Rebalanced Grenades",
+          "sha256": "cd5147cef8695a8f9c42c110770cdfa1197778b541ca21307310488980e9b5e3"
+        },
+        {
+          "path": "Override/component-0123.txt",
+          "sourceGuid": "eafb1b50-fc7f-5448-bace-be1d32e4f244",
+          "sourceName": "HD Grenades & Mines",
+          "sha256": "d3e7d912e296fe4c4c501606a587f10413107397d16724a16fa5d6583c45918b"
+        },
+        {
+          "path": "Override/component-0124.txt",
+          "sourceGuid": "ae68d6b3-734c-58c0-bd06-a89613e8979f",
+          "sourceName": "Turret Minigame Remover",
+          "sha256": "39c1d97e0e33f6fabfba5dd53f1bf9c7d3cef0fbe337fabe7ab2713b65c44c5e"
+        },
+        {
+          "path": "Override/component-0125.txt",
+          "sourceGuid": "93d7f206-927d-50c2-becc-9f9671ae6f05",
+          "sourceName": "Tutorial Remover",
+          "sha256": "3cda44931714186b07ece2f9fd558a14deac5ad2119d5ae845f616f3795bbf9f"
+        },
+        {
+          "path": "Override/component-0126.txt",
+          "sourceGuid": "f7bc5c67-5569-58fd-99ff-b0a6b9dda270",
+          "sourceName": "Leviathan Prison Break",
+          "sha256": "b150c98366d4e17bfc373ddbe3e2ddf43b1d2b80eeb2973a27d91feef4a6b1b6"
+        },
+        {
+          "path": "Override/component-0127.txt",
+          "sourceGuid": "d2ae12b4-550b-53be-97e8-2c673b8c217f",
+          "sourceName": "Ain't No Air in Space",
+          "sha256": "71ede2c1826c51f14e9ff5c44c5463c2dc9b49b077abffae4d46af6cc8b356fb"
+        },
+        {
+          "path": "Override/component-0128.txt",
+          "sourceGuid": "f0045f84-e6cc-55e0-b73f-dd46bfcb743c",
+          "sourceName": "Party Conversations on the Ebon Hawk",
+          "sha256": "06b8ee8e6a83e975800bdc3756cc3f2adad049d22d1356ba94369bb194f7f43e"
+        },
+        {
+          "path": "Override/component-0129.txt",
+          "sourceGuid": "2f37608b-d46c-56cf-97e6-277df8478518",
+          "sourceName": "Dark Sacrifice",
+          "sha256": "dcec739dc733618502c4f82d2dcda0bf0f065351b7cc2442747d34a759a143db"
+        },
+        {
+          "path": "Override/component-0130.txt",
+          "sourceGuid": "23cbe7a2-78d0-5f54-a2f0-757d4138bdf6",
+          "sourceName": "Saber Throw Knockdown",
+          "sha256": "8f4ed78f8a8eaf081f12a6ce2eccbde0b2092ce5b3d0afea3995f0b4fa18acc9"
+        },
+        {
+          "path": "Override/component-0131.txt",
+          "sourceGuid": "8909a357-3a59-5e0e-b51a-1ac243b5bdf7",
+          "sourceName": "Sunry Enhancement",
+          "sha256": "d9297a278aa633bc1a8dc507fd06faa9a32c97c1f1dd2948374bc5303889c881"
+        },
+        {
+          "path": "Override/component-0132.txt",
+          "sourceGuid": "3bc17dde-8c3c-5fdf-93e3-70dc4774b03c",
+          "sourceName": "Davik Slave Change",
+          "sha256": "752803918a6e876f4b16e40ff38d4fca7a43a4adead9fc7fb747f48882d26188"
+        },
+        {
+          "path": "Override/component-0133.txt",
+          "sourceGuid": "7c823cfd-52fe-5c60-a083-da997d403e6f",
+          "sourceName": "Taris Rapid Transit",
+          "sha256": "b11468baf26b2f29f86ab866fc61bb7b3ab0900df1a73db992936f2e3760223f"
+        },
+        {
+          "path": "Override/component-0134.txt",
+          "sourceGuid": "0b73f502-fde2-55e7-8c82-11b12f3ab99c",
+          "sourceName": "Manaan Rapid Transit",
+          "sha256": "996b97bdcd7d3aa5e98445a01ebe30a56d97d7b7214a7fd4da2345704c268750"
+        },
+        {
+          "path": "Override/component-0135.txt",
+          "sourceGuid": "9cf5c8d5-521a-5b1b-ac3d-11d92aa58ac3",
+          "sourceName": "Recruit T3-M4 Early",
+          "sha256": "077cc0f12c6b3fad6ce28ddaac2e1680f2c64f21141ce2baed91b3681d18735f"
+        },
+        {
+          "path": "Override/component-0136.txt",
+          "sourceGuid": "2ce122ab-dd44-5739-a880-cfb089d0ce29",
+          "sourceName": "Security Spikes for K1",
+          "sha256": "396d322827bc687e603f4e4052ad1ee4e4ece07a7776d37cb2ddd1369853d17a"
+        },
+        {
+          "path": "Override/component-0137.txt",
+          "sourceGuid": "8a60ec4b-f3df-5064-b577-4bdeaea67484",
+          "sourceName": "HQ Blasters",
+          "sha256": "b3f26bfac3207279c865bae7d449b11b38958875634923e27e8be6f47edbe44d"
+        },
+        {
+          "path": "Override/component-0138.txt",
+          "sourceGuid": "8a23a06e-3b92-5457-9213-78110fc9ddf7",
+          "sourceName": "Crashed Republic Cruiser",
+          "sha256": "eb2311503fac9aece3f2e35c37983b4754ac410a105d9c66b0e77883e7ad14c1"
+        },
+        {
+          "path": "Override/component-0139.txt",
+          "sourceGuid": "92bf9373-212a-50d5-8329-8bef66c9518d",
+          "sourceName": "Trandoshans Rescaled",
+          "sha256": "1760581bd238b80570ad2ebe25b7a4a62aa53741f0fd2c37d68013160bee4c2f"
+        },
+        {
+          "path": "Override/component-0140.txt",
+          "sourceGuid": "421c4465-20bf-59cc-81ac-5ea60c1d311d",
+          "sourceName": "Custom Selkath Animation",
+          "sha256": "840e36a040582a776656fcd5bf662a1ab09adc311c2561f01134ca606631705b"
+        },
+        {
+          "path": "Override/component-0141.txt",
+          "sourceGuid": "e734813e-6d28-5320-812c-9c733fb839d4",
+          "sourceName": "Bastila Has TSL Battle Meditation",
+          "sha256": "9795e7fae3093ce1145013d3790b5d58e632b62c445b38ab1446fa8f253bc640"
+        },
+        {
+          "path": "Override/component-0142.txt",
+          "sourceGuid": "e44afe85-5e98-52e6-91bd-179e361b95b0",
+          "sourceName": "Sneak Attack Restoration",
+          "sha256": "d00ad25cb11cb98033559ce76dcc29e57ce031ee1f8733d9f55f27a823d1f8aa"
+        },
+        {
+          "path": "Override/component-0143.txt",
+          "sourceGuid": "f53e4051-44fc-5888-84ff-497b4b4ef335",
+          "sourceName": "Sentinel Sneak Attack",
+          "sha256": "62d78ee0d3a6156f0bf1bf8ffd3e78d07eb3cae6bd51613fb0f3aeab2e00807c"
+        },
+        {
+          "path": "Override/component-0144.txt",
+          "sourceGuid": "ff2ecaf7-ef49-5a4d-9f6f-6d1a37dd618a",
+          "sourceName": "Thematic The One",
+          "sha256": "4b19c289445e5a44c6a487bb39689b4f28e08ec41a5aaf6e15c541fa6c820adc"
+        },
+        {
+          "path": "Override/component-0145.txt",
+          "sourceGuid": "1f1c2d45-c3cc-50a3-99a6-e8ec34a93caa",
+          "sourceName": "Sherruk with Lightsabers",
+          "sha256": "e71b07688a7652479ef2c9640cab847ccf4e2d1abaf16b43aaf82102c5fc7f93"
+        },
+        {
+          "path": "Override/component-0146.txt",
+          "sourceGuid": "7b7bddcf-8624-59fe-a954-d6b7f9e9343e",
+          "sourceName": "Improved Cantina Sitters",
+          "sha256": "89d076c730a874dd8a1b95a8f1d7ce96f3980ce7ba90eeda5365b8242e29b7d4"
+        },
+        {
+          "path": "Override/component-0147.txt",
+          "sourceGuid": "8745d13a-3092-5be3-b8fb-df662148cc8a",
+          "sourceName": "Helena Shan Improvement",
+          "sha256": "96f9ae55f231917e85200433a0b5676cb2ae77bcde6b3b94ad8e53daec07ef43"
+        },
+        {
+          "path": "Override/component-0148.txt",
+          "sourceGuid": "9f3f907c-6d2c-563c-bb9c-1d0682c28ca1",
+          "sourceName": "Bastila's Dark Bodysuit",
+          "sha256": "504c91e46009076012bbedcf0e448aac5fd1dbf6b0585418d3c82a97124294c6"
+        },
+        {
+          "path": "Override/component-0149.txt",
+          "sourceGuid": "d7e26fda-2c09-5387-adbd-df9238b857e6",
+          "sourceName": "Dueling Arena Adjustment",
+          "sha256": "2383d3ed7e6f90137ff07c00a3f93ab6218871d14ca437f4c6c4813160e689f5"
+        },
+        {
+          "path": "Override/component-0150.txt",
+          "sourceGuid": "f864cd31-7b4e-581c-93ca-ff09ae78ab3a",
+          "sourceName": "Bendak Non-Darkside Option",
+          "sha256": "2fd934fde44e6602fcd033c0728ff2d8f97c8f9a88f96a8703c651cebfbf9f78"
+        },
+        {
+          "path": "Override/component-0151.txt",
+          "sourceGuid": "23b1f8a4-347c-538c-a27f-404b7e054277",
+          "sourceName": "Kashyyyk Forcefield Rework",
+          "sha256": "c9791c4ede237c6a701462889e729ec5b60575b164a8c9145f3f4c3e168fc84c"
+        },
+        {
+          "path": "Override/component-0152.txt",
+          "sourceGuid": "1dc31a09-ca86-5b76-b19b-8fb773fb249e",
+          "sourceName": "Swoop Platform Repair",
+          "sha256": "ce8e799e69f143e01c42536dc438b5dd981d08426c7617dd5903354611777514"
+        },
+        {
+          "path": "Override/component-0153.txt",
+          "sourceGuid": "31420433-753a-5b83-ad1f-fc66c0dbeef2",
+          "sourceName": "Engine Lab Bench",
+          "sha256": "8de1cac5f78ada871f700e5117594f87647a8b2e84f7a38c024a5a4e54636e88"
+        },
+        {
+          "path": "Override/component-0154.txt",
+          "sourceGuid": "2418251f-d10f-53e1-bb05-e5813f3005c6",
+          "sourceName": "Missing Lamps Fix",
+          "sha256": "54e4104516d0efc1be12a512ae99248dedbcee71bc2f3801a83d2b4bb4179468"
+        },
+        {
+          "path": "Override/component-0155.txt",
+          "sourceGuid": "1fdb8d2e-c6ed-5a38-8c13-64c2300e1414",
+          "sourceName": "Czerka Business Attire",
+          "sha256": "559efddfbcb84e9b247d109df7e751d79853ab231b00bf8a151a32536ee96862"
+        },
+        {
+          "path": "Override/component-0156.txt",
+          "sourceGuid": "56a29dfd-5731-5051-96f0-74cf7195aafe",
+          "sourceName": "Sith Texture Restoration",
+          "sha256": "7fe44641e8191e0dca8e66f06d3dd3adca6544523e1bfb7bfe50e77051415f0b"
+        },
+        {
+          "path": "Override/component-0157.txt",
+          "sourceGuid": "bf268ae1-2829-5a3b-a1f2-c883d240e775",
+          "sourceName": "Diversified Republic Soldiers",
+          "sha256": "4a7711c0af5db6481647d2158f1b30ac817f450ec0ecbb3db63248576ed8330d"
+        },
+        {
+          "path": "Override/component-0158.txt",
+          "sourceGuid": "dde5e4f4-5a3e-5e0b-a42d-e4d840838890",
+          "sourceName": "Diversified Jedi Captives",
+          "sha256": "102087f64509665114f0d450e353c3bae71880dc271c5a3a0c6e8d506367b6bd"
+        },
+        {
+          "path": "Override/component-0159.txt",
+          "sourceGuid": "651c84fb-8129-55db-916d-435073870a24",
+          "sourceName": "Juhani Romance Enhancement",
+          "sha256": "98d6ec1891976d22b54c01ed52ae9b98e3fb5eea8b1e4d9e8b8ddf4680f555bd"
+        },
+        {
+          "path": "Override/component-0160.txt",
+          "sourceGuid": "11b6c675-04cc-59a7-8e4e-ddaeba2b3d38",
+          "sourceName": "Dodonna's Transmission",
+          "sha256": "590bdb245583de7de7fc66f90775b1c508c0969e89d66ade6a5029f95b910798"
+        },
+        {
+          "path": "Override/component-0161.txt",
+          "sourceGuid": "061ef77b-326e-543b-b9d4-3ccf3c923c03",
+          "sourceName": "Endgame Hologram Fix",
+          "sha256": "7628c613a6fec3574b01ed167d71bc67d42d41d78aa31aa6052674f07a45a53f"
+        },
+        {
+          "path": "Override/component-0162.txt",
+          "sourceGuid": "8f704d06-0748-57b3-abdd-ff853948916e",
+          "sourceName": "Twisted Rancor Trio Fix",
+          "sha256": "d4f825732306b15e93b9b3861586cf14c7e7e1cbc751f8c0a8101651db614de2"
+        },
+        {
+          "path": "Override/component-0163.txt",
+          "sourceGuid": "dc1b29c5-b8a2-5a98-8520-f8286e40c3c4",
+          "sourceName": "Rakatan Hologram Fix",
+          "sha256": "058b21bd7dd6209c85f37f26f99b9c7aff281ed9c8309d3b533820651e7d9c66"
+        },
+        {
+          "path": "Override/component-0164.txt",
+          "sourceGuid": "1722529c-70cb-51bd-9941-686a31b48b31",
+          "sourceName": "Ending Enhancement",
+          "sha256": "a8eed245314c97cd6aefed8c1697fcf330098d3170cecea7526f9d0c0b290153"
+        },
+        {
+          "path": "Override/component-0165.txt",
+          "sourceGuid": "c580976d-c13f-56e1-b2de-8bda5df31bce",
+          "sourceName": "Elder Droid Unique VO",
+          "sha256": "2c15efe5b76a63b40b53ed1c762de7b635423d265dc4e3ebd11ee6f6528b9de6"
+        },
+        {
+          "path": "Override/component-0166.txt",
+          "sourceGuid": "67de9967-9ceb-5978-83a0-a0cfd3b397a5",
+          "sourceName": "Ajunta Pall's Swords",
+          "sha256": "66bd85335f577a8495292e75274ee488790e5520b4df2d7ed58d1d6c34bb633b"
+        },
+        {
+          "path": "Override/component-0167.txt",
+          "sourceGuid": "c3afb51c-ef03-59cc-aa46-61bb0923b112",
+          "sourceName": "Ajunta Pall's Blade",
+          "sha256": "23aba32d204c7dbf6de539e4170783f1a4e47595fdfbed201080d5b0a7ebac0c"
+        },
+        {
+          "path": "Override/component-0168.txt",
+          "sourceGuid": "d88192c3-299a-51cb-bc5c-7432e066e1e0",
+          "sourceName": "JC's Mandalorian Armor",
+          "sha256": "51d0cb4dd41604149718ce611bc370bba11f1a038116a07823d3bf738e88a858"
+        },
+        {
+          "path": "Override/component-0169.txt",
+          "sourceGuid": "2f29459b-8c23-5374-b896-6016b3eed4aa",
+          "sourceName": "Multifire & Autofire",
+          "sha256": "c6567f72b13a832dbb9c7ee08746b67419eae423bd9a9c6a50ff3462b2c3fff8"
+        },
+        {
+          "path": "Override/component-0170.txt",
+          "sourceGuid": "0fae971c-d3e7-5c28-9fdc-c4f7005dccaa",
+          "sourceName": "Blaster Adjustment",
+          "sha256": "1a50e985f82b50fc4817a65f668f82d3d1f46cce910dfa0b2ee8ed042f07f4a3"
+        },
+        {
+          "path": "Override/component-0171.txt",
+          "sourceGuid": "0e70224b-6e95-5d5e-b4de-05448374ff0c",
+          "sourceName": "HQ Gaffi Stick",
+          "sha256": "c54b523065e5254e5991ab9f83ff23c4e8b82535c79a0317dbc6398ad4fa96a2"
+        },
+        {
+          "path": "Override/component-0172.txt",
+          "sourceGuid": "a792070e-c6a4-5a32-97f8-0d73944224c8",
+          "sourceName": "HD Quarterstaffs",
+          "sha256": "96df1c9797a86a153428a0f9fec5a26cea525617180b8dde6fc0a7c4ae82edc7"
+        },
+        {
+          "path": "Override/component-0173.txt",
+          "sourceGuid": "b1c500fa-f845-5657-9ad5-6e75e922cf31",
+          "sourceName": "Training Lightsabers",
+          "sha256": "ba943a14684ef5da62142564ecf30dc79f39f6f90835e61fb0c25150e5749fb3"
+        },
+        {
+          "path": "Override/component-0174.txt",
+          "sourceGuid": "208f71fc-103d-556f-858b-e79e6ec14f2d",
+          "sourceName": "Logical Datapads",
+          "sha256": "a3eb60001b731eb03948581370935de637efbfe9f61a99d4a103e93985a2bed2"
+        },
+        {
+          "path": "Override/component-0175.txt",
+          "sourceGuid": "1107e72d-9384-5093-803e-724d988576e3",
+          "sourceName": "Realistic Visual Effects",
+          "sha256": "73db83b5b90b992d7d1731fb0dd61e3b50ff5e3fe47cc57b9554501c103da7a5"
+        },
+        {
+          "path": "Override/component-0176.txt",
+          "sourceGuid": "3e58f953-d661-5bbd-a549-fb85c19eed3e",
+          "sourceName": "Minor Music Tweaks",
+          "sha256": "92110a64e234c3e421c80d5fa2a563db6377e3b26a3b702f1875718365e6850b"
+        },
+        {
+          "path": "Override/component-0177.txt",
+          "sourceGuid": "b660a824-1b8a-5042-98e7-d44f0ffa6d27",
+          "sourceName": "NPC Alignment Fix",
+          "sha256": "463bd9fe007d7248f3aa5f2f268972d48cdb8f86bbfcd6018e6cd29e6170b71d"
+        },
+        {
+          "path": "Override/component-0178.txt",
+          "sourceGuid": "564cdf29-627c-5e72-baec-41fd6f0382a0",
+          "sourceName": "Repair Affects Stun Droid",
+          "sha256": "1a9e29cfac8f9f5d391ca622af51141ca5ab8c135be04c074cd9b33d209b7a21"
+        },
+        {
+          "path": "Override/component-0179.txt",
+          "sourceGuid": "7f01ce5e-3b5c-5915-b115-7523b08f1ea1",
+          "sourceName": "Alignment Affects Force Powers",
+          "sha256": "9f0cbffad5204fe2c5f2dde8e4bb98c46bb88d6596a7a30d6ca8fcabd54ba3a1"
+        },
+        {
+          "path": "Override/component-0180.txt",
+          "sourceGuid": "b35d7284-3236-5352-8127-d5e394066fc2",
+          "sourceName": "Galaxy Map Fix",
+          "sha256": "2a83bb469fdb8387b63bfd7cf95132424439784d5c002f4326e07624bf3c6d5c"
+        },
+        {
+          "path": "Override/component-0181.txt",
+          "sourceGuid": "886826e5-e451-58a6-be86-2462dfb7e2bc",
+          "sourceName": "Remove Duplicate TGA/TPC",
+          "sha256": "be883d2541c49fa222a582ee71832de0a83a90e54e4851f10684d62fe880e99e"
+        },
+        {
+          "path": "Override/component-0182.txt",
+          "sourceGuid": "3c1619b0-143a-5951-b461-350f13dac801",
+          "sourceName": "Ultimate Character Overhaul Patches",
+          "sha256": "c0f427610398108c4474834dfd8e1111d8510a80c52ec641832613abb4d5cf05"
+        },
+        {
+          "path": "Override/component-0183.txt",
+          "sourceGuid": "6dcfe3f8-9822-5162-91ec-b6bd532d9e7b",
+          "sourceName": "Republic Soldier Fix",
+          "sha256": "7e2944f5436883e0f9d4fb69bfa76ebbca057cfb8a01dc52dc45b2aed2487c62"
+        },
+        {
+          "path": "Override/component-0184.txt",
+          "sourceGuid": "6c01296a-17ff-5766-b8cc-82b8a6f2bb6c",
+          "sourceName": "Republic Soldier's New Shade",
+          "sha256": "8fa0c4d203b5e1d9bb5f788aa8e869da0711cf30d7934d6f652c4293c260e5ca"
+        },
+        {
+          "path": "Override/component-0185.txt",
+          "sourceGuid": "d7c1dba9-7cf5-5529-aa2f-da29ff420d9a",
+          "sourceName": "Character Textures & Model Fixes",
+          "sha256": "1ec1fe26f0b6777dca947964907d82d2852564bd292d21a32ae33818af8843a5"
+        },
+        {
+          "path": "Override/component-0186.txt",
+          "sourceGuid": "0979a4d8-c31d-5efc-88bc-d9f8a29a2ec5",
+          "sourceName": "4GB Patcher",
+          "sha256": "2c329f8e1b1e4a27015e05262dc7be19f2c3557057c3a40436e21ca5ba9adc28"
+        },
+        {
+          "path": "Override/component-0187.txt",
+          "sourceGuid": "ebe3921f-f73c-5206-bb7e-a800138443b3",
+          "sourceName": "Turret Cockpit Widescreen",
+          "sha256": "2180fd7f3e99e32d4505dbb52b1cd723e3058db1e40a8de0472fff029e0fd7da"
+        },
+        {
+          "path": "Override/component-0188.txt",
+          "sourceGuid": "f2cedf61-c8e1-5ba4-825a-597f073e7953",
+          "sourceName": "HR Menus",
+          "sha256": "9e1286435e205da28bba3493ba5d1b264d22b418021425e2f65e52109e32636b"
+        },
+        {
+          "path": "Override/component-0189.txt",
+          "sourceGuid": "469c5100-362e-56e1-b77f-18876d444398",
+          "sourceName": "HD UI Menu Pack",
+          "sha256": "38da402e825d21638be826b4f6fd03feda8b01040f6ef50817c314743963e00b"
+        },
+        {
+          "path": "Override/component-0190.txt",
+          "sourceGuid": "be993942-942e-5e84-a22e-dff31a7f00b4",
+          "sourceName": "Workbench Camera Tweak",
+          "sha256": "0bf8af17356549c1ec16f86ce35cabeb8298723df928a9ee0b497b3cd3187ee9"
+        },
+        {
+          "path": "Override/component-0191.txt",
+          "sourceGuid": "9b03590f-e088-5d63-ac7c-8340d638045d",
+          "sourceName": "Pretty Good! Icons",
+          "sha256": "61c64d28017de48149b0b169657c078bc62191f7f1d6a94ab8c7a0552e156e63"
+        },
+        {
+          "path": "Override/component-0192.txt",
+          "sourceGuid": "c8e81881-a825-5c69-a277-f40d0f4baa79",
+          "sourceName": "Robe Icons for JC's Cloaked Robes",
+          "sha256": "fe644da819442df8434c9e785ac00cb249dc3b7dd642eb72db04c638672c0f29"
+        },
+        {
+          "path": "Override/component-0193.txt",
+          "sourceGuid": "704e905d-7e58-57f9-8e55-566c0fbf43e3",
+          "sourceName": "Upscaled Computer",
+          "sha256": "8fe403a7e4f5dd3f94ef1a7a9056c5149753857b10eb7d4d2f82c9f4829871e2"
+        },
+        {
+          "path": "Override/component-0194.txt",
+          "sourceGuid": "fd947aaa-afcc-54bf-ab38-b614be256a76",
+          "sourceName": "Widescreen Fade Fix",
+          "sha256": "5e943567443ba3934b2ffc60618bc55a42ff0da6e2aaad0106bfdf0f967376cf"
+        },
+        {
+          "path": "Override/component-0195.txt",
+          "sourceGuid": "ebba6a01-4a58-5bda-9087-22f51eb65018",
+          "sourceName": "Main Menu Widescreen Fix",
+          "sha256": "cff26051d5539ca30e9f26c00753f6bdb7a0f99250725261c98507531c87d3f8"
+        },
+        {
+          "path": "Override/component-0196.txt",
+          "sourceGuid": "b250fdaa-d6ce-5b59-b262-894b39342e22",
+          "sourceName": "Cutscenes Rescaled",
+          "sha256": "1c478b865a9df5f78d0797d498aa020def6e5bb43464539f24090750d55f9227"
+        },
+        {
+          "path": "Override/component-0197.txt",
+          "sourceGuid": "6baa803b-9cbb-5e9e-a667-5239c922b2f4",
+          "sourceName": "Remastered Cutscenes",
+          "sha256": "3dd054e34f09d77a113d24948aada5aaaaf78ed65dcf8e5f6f269478b49a3d5d"
+        }
+      ],
+      "dryRunNoWrites": true,
+      "baselineRollbackVerified": true,
+      "statement": "Source mapped synthetic archive and file mechanics only. Patcher/Execute/prose omissions remain unverified."
+    },
+    {
+      "game": "KOTOR2",
+      "lane": "fullmd-derived-synthetic-mechanical-install",
+      "componentCount": 154,
+      "instructionCount": 308,
+      "proofs": [
+        {
+          "path": "Override/component-0001.txt",
+          "sourceGuid": "b6422393-ae5e-5224-ab84-d6a3e55501ef",
+          "sourceName": "3C-FD Patcher",
+          "sha256": "fb15f4642967c126555c390b812fde15ff8c1a48c6f39366e5b45168c33b111e"
+        },
+        {
+          "path": "Override/component-0002.txt",
+          "sourceGuid": "efceef8f-75fc-58cf-8116-5eac04e0f93e",
+          "sourceName": "Water Restoration",
+          "sha256": "785b73afe8ae733158fdae08d1f87460b74fbc70846b879d38877540cd0551f7"
+        },
+        {
+          "path": "Override/component-0003.txt",
+          "sourceGuid": "2a9e26f4-d383-556e-97a1-aac46b39b435",
+          "sourceName": "Stutter Fix",
+          "sha256": "c66d290b2222138a4f6a7f0c216c066129ffd4e596b0613ab165d4061646fbaa"
+        },
+        {
+          "path": "Override/component-0004.txt",
+          "sourceGuid": "0979a4d8-c31d-5efc-88bc-d9f8a29a2ec5",
+          "sourceName": "4GB Patcher",
+          "sha256": "e1f10d3030851babb7289ba8b5d7cf66296c2697d286e08478605dfd067456de"
+        },
+        {
+          "path": "Override/component-0005.txt",
+          "sourceGuid": "8758e82b-6fc2-5cb1-b3df-5563fde0641f",
+          "sourceName": "TSLRCM",
+          "sha256": "6cfa71856d97891f0b5f488e6ccf7dc2e6c3d0f4e4fc5f165fdbd30da890441a"
+        },
+        {
+          "path": "Override/component-0006.txt",
+          "sourceGuid": "64bdb0e9-d76c-5805-99af-14913d307659",
+          "sourceName": "TSLRCM Tweak Pack",
+          "sha256": "083564776d5272d849d5bc04cfe8d21162950fda7146853b6f58855d22f5c1a8"
+        },
+        {
+          "path": "Override/component-0007.txt",
+          "sourceGuid": "b7bb9b00-2fab-5143-bbd3-7edafc12101e",
+          "sourceName": "Silent Sion",
+          "sha256": "e317ae18a600690734ebe7f8a789de2e0d125ace01ef12c2dd41333274f904e5"
+        },
+        {
+          "path": "Override/component-0008.txt",
+          "sourceGuid": "c12a73e7-e673-5b6d-a222-cc9f160a1763",
+          "sourceName": "Thematic KOTOR 2 Companions",
+          "sha256": "7ed2e1f47472b93cf388fcd980a5d170dadda82be19bd9ace55142ab0195cb34"
+        },
+        {
+          "path": "Override/component-0009.txt",
+          "sourceGuid": "0f682d00-f8fe-5d6e-a085-5df99f3419dd",
+          "sourceName": "Saving Throw Fixes",
+          "sha256": "03fc617ad114f05f683cb4c7e53bcfdb5b688c42ed796259cbfda1a6177b73b2"
+        },
+        {
+          "path": "Override/component-0010.txt",
+          "sourceGuid": "429ae558-7fed-5486-b94c-16f7c336c9d3",
+          "sourceName": "Classic Class Attack",
+          "sha256": "f1018901c19aa8facc0ad41ef0fba968d4eb872a7b09fbaf526db2cb88c116a7"
+        },
+        {
+          "path": "Override/component-0011.txt",
+          "sourceGuid": "6b67c098-cf1c-5ac8-a7f2-b545be6fd50e",
+          "sourceName": "Robes with Shadows",
+          "sha256": "759633cf030ea820b0eac148e2d61ca1359cf261edfbf56983ee94b2aa569220"
+        },
+        {
+          "path": "Override/component-0012.txt",
+          "sourceGuid": "cfb4e69c-7989-5836-b7a3-802bc556c20a",
+          "sourceName": "K2CP",
+          "sha256": "5ded8ca52f7d670f3ae822c6f1eb8fc6c70e49cc169e88fb8f9a1f88f622cfac"
+        },
+        {
+          "path": "Override/component-0013.txt",
+          "sourceGuid": "c7a325b8-c316-5a75-a387-5b5869e42111",
+          "sourceName": "Remote Tells Influence",
+          "sha256": "81f2d3b050d8d9c73e6c16b33bca7b705528f45208a480da34845285b487499e"
+        },
+        {
+          "path": "Override/component-0014.txt",
+          "sourceGuid": "fa51657c-818b-51ae-bedc-320b88f24626",
+          "sourceName": "Better Czerka Salvager",
+          "sha256": "1111615e9106aa96bb8b225d3579f820ecbeabac074590d790df8c46b0c344cc"
+        },
+        {
+          "path": "Override/component-0015.txt",
+          "sourceGuid": "14888cc7-b17b-560e-9498-da144dc39eea",
+          "sourceName": "Ultimate HR Textures",
+          "sha256": "37eb77d228d220e16c59a3a4d01bcf1a48828075b092af1a99ef8125d3de80f0"
+        },
+        {
+          "path": "Override/component-0016.txt",
+          "sourceGuid": "77cdad13-0b75-58f9-b921-1c8086815971",
+          "sourceName": "Ultimate Character Overhaul",
+          "sha256": "69dbd7499febe7253781f6c8659b6b357e03d22050e088e186348daf52e5b84b"
+        },
+        {
+          "path": "Override/component-0017.txt",
+          "sourceGuid": "9f8f6115-f5a1-5678-bd0a-0e6b39359988",
+          "sourceName": "Ultimate Nar Shaddaa",
+          "sha256": "99e4b72d4d9a51e278f60943558ca54d63eb3e2a17288ca308f9088c2bfe91d8"
+        },
+        {
+          "path": "Override/component-0018.txt",
+          "sourceGuid": "7c3884fc-a06a-5e69-bb36-a12c056db661",
+          "sourceName": "Ultimate Dantooine",
+          "sha256": "bfe2fa0261f712e88b7b591d981eb81358deae61e8d286f10918c9d5bd307502"
+        },
+        {
+          "path": "Override/component-0019.txt",
+          "sourceGuid": "c7495590-470e-5c20-af88-2cfb2858e551",
+          "sourceName": "Ultimate Dxun",
+          "sha256": "a742a29a8cf8195799c0084a5be4b7853307b1b38ea168b8fb4dfb1912911c57"
+        },
+        {
+          "path": "Override/component-0020.txt",
+          "sourceGuid": "6e9683a8-d8b0-5c25-af9e-86385d9f43d1",
+          "sourceName": "Ultimate Onderon",
+          "sha256": "61e834245f2e4dc7b8f9f48d9c5dcd8825c1d34d8fa06cf1271df0b2e9c6ba45"
+        },
+        {
+          "path": "Override/component-0021.txt",
+          "sourceGuid": "e01a446b-11fd-5b7b-a7d8-8dd106628674",
+          "sourceName": "Ultimate Korriban",
+          "sha256": "29f030d9dce327e07f42bc89d64aae13db6512ea9f2840e2f5d44dd6ac0dc484"
+        },
+        {
+          "path": "Override/component-0022.txt",
+          "sourceGuid": "e1cbf517-1a79-5f2a-9fa8-0ec3d79b2840",
+          "sourceName": "Ultimate Malachor",
+          "sha256": "400b52ca44ae9feee4f076596d6193be392f9d616fb9eadaac4d0842b08114af"
+        },
+        {
+          "path": "Override/component-0023.txt",
+          "sourceGuid": "eab6db56-cc6e-58f6-8f5c-f443ef54e56a",
+          "sourceName": "Korriban Sith Art",
+          "sha256": "ab824e25e9923881ed21ba22c7ee035c7e1e035c3b1e6a90c0350e1ee0d37a8a"
+        },
+        {
+          "path": "Override/component-0024.txt",
+          "sourceGuid": "73057bb0-999a-5e7c-b776-2cf10d6af5fe",
+          "sourceName": "Ritual and Water Textures",
+          "sha256": "28cd89c388246925c6f11cc72a712519cf3a590e803fd288d260fc7b49fdec3b"
+        },
+        {
+          "path": "Override/component-0025.txt",
+          "sourceGuid": "fdf7b324-9d67-5a75-92eb-02b76de10828",
+          "sourceName": "PFHC06 Fix",
+          "sha256": "409afefb94ed1e4b6111de6238029414df06acdd7f0813a71a133711e85851d1"
+        },
+        {
+          "path": "Override/component-0026.txt",
+          "sourceGuid": "e873f00b-a051-57ff-9051-cb79967fd48d",
+          "sourceName": "Droid Special Weapons Fix",
+          "sha256": "e3c67d0fd4c089463166e7793f70682776570e2654f0b0eab634d74d267d2721"
+        },
+        {
+          "path": "Override/component-0027.txt",
+          "sourceGuid": "fb695f97-aaac-5f04-9380-c93da393a6ca",
+          "sourceName": "Honest Merchant",
+          "sha256": "9e384008683c8066a7dc2f176eb9148a26658fbb67708dfa3b14879a1a7a3c5f"
+        },
+        {
+          "path": "Override/component-0028.txt",
+          "sourceGuid": "172a906c-4803-57de-aa2b-4959f3f04bbf",
+          "sourceName": "JC's Minor Fixes",
+          "sha256": "e58b50f57efc766da0f0b96f20e6b57235abd68136c29f23c6efb403db373972"
+        },
+        {
+          "path": "Override/component-0029.txt",
+          "sourceGuid": "986db4ed-b287-501f-b82e-1992e1aeb102",
+          "sourceName": "Maintenance Reskin",
+          "sha256": "2a71bc320c0ad6769eee2c0291b9537b37b2c68a91734ccdf4fd3e45b6d13786"
+        },
+        {
+          "path": "Override/component-0030.txt",
+          "sourceGuid": "c66d571d-930c-5e2c-aebf-cf62af3a8976",
+          "sourceName": "HD Sign Placeable",
+          "sha256": "7a50b4cf5456d95330f26d93fbeb4e17bc333c1f651d384bb44e66a16cae0fef"
+        },
+        {
+          "path": "Override/component-0031.txt",
+          "sourceGuid": "6e2e80d5-e347-59df-9e89-32d06157130d",
+          "sourceName": "HD Kiosk",
+          "sha256": "ba4f8e5c5fab37a8bc772bd6a5802a3b143ae1e508dec97557e79a3969b0dae7"
+        },
+        {
+          "path": "Override/component-0032.txt",
+          "sourceGuid": "ab8aa659-28ba-5ab1-b920-92d45e298e55",
+          "sourceName": "HD Desk",
+          "sha256": "976030a0a17bb3029e89f5d8e163dfb644c210367dc23d9988506de907d4af8e"
+        },
+        {
+          "path": "Override/component-0033.txt",
+          "sourceGuid": "a3998f48-7b97-5c72-b405-f04f46d0270e",
+          "sourceName": "Hires Beam Effects",
+          "sha256": "46d56a03a61dbca4294afd3a25cdf9dcfce6d65721d8217aa26bad445796e800"
+        },
+        {
+          "path": "Override/component-0034.txt",
+          "sourceGuid": "bc10f919-eed2-5e9f-a169-4b084373dbfe",
+          "sourceName": "Fire and Ice HD",
+          "sha256": "a3ce29ea63c1b3912a63babddf97ac409419889201a06afaefa75e763832915b"
+        },
+        {
+          "path": "Override/component-0035.txt",
+          "sourceGuid": "4d979153-fb19-5664-acea-dddc546902fd",
+          "sourceName": "Animated Energy Shields",
+          "sha256": "ddec4ab43df1ffa7f30e976943fa81a6955d42a76fa7731cb31e7d971a541b59"
+        },
+        {
+          "path": "Override/component-0036.txt",
+          "sourceGuid": "85f7c208-ecb7-5b39-baac-1f423f346f0e",
+          "sourceName": "Blaster Visual Effects",
+          "sha256": "66e00d524f31c1d3a0fe3f082e3fb927ccd7ae7c404cbea40845f8148f557499"
+        },
+        {
+          "path": "Override/component-0037.txt",
+          "sourceGuid": "1d2811a6-fa15-5c8a-b115-ed5642e082b6",
+          "sourceName": "Head Model Fixes",
+          "sha256": "436e35fa4470cc00485a66dcdb65cede5f0488d00c3050ae0a57369c1abc1b69"
+        },
+        {
+          "path": "Override/component-0038.txt",
+          "sourceGuid": "1c388560-65bb-54d6-9687-b52ac8b46410",
+          "sourceName": "New Holocron Textures",
+          "sha256": "4ce0a72b1c149b9683a06a73a264b3ce8d9e7e6811b1fea00983a4e21af6a51f"
+        },
+        {
+          "path": "Override/component-0039.txt",
+          "sourceGuid": "ec0a86e3-3a95-5880-bb73-917ccbe71ff2",
+          "sourceName": "Thigh-High Boots for Twi'lek",
+          "sha256": "1c6f15ea66b55e0659bc397b01e22cef0647c2ed3adc0e48c023b1df96a9f1f6"
+        },
+        {
+          "path": "Override/component-0040.txt",
+          "sourceGuid": "36ea92bd-b42b-5817-bc05-0ea7fdb50650",
+          "sourceName": "Better Twi'lek Heads",
+          "sha256": "43f87e01712ce6c8847c0cc3c7566927e6ac1348ee5c5ec04de4b6f25ed586a8"
+        },
+        {
+          "path": "Override/component-0041.txt",
+          "sourceGuid": "8bdd0780-07b8-5cb7-9950-345ebca52b7c",
+          "sourceName": "Twi'lek Male Diversity",
+          "sha256": "1797607fafe23dbc79176d0d6e50642bf00c3a66367ad5187138fe9814a86f8b"
+        },
+        {
+          "path": "Override/component-0042.txt",
+          "sourceGuid": "b94e7626-3364-5d39-ae0b-579b369f910f",
+          "sourceName": "Dahnis Unique Look",
+          "sha256": "a6ab62caa2bd0ed268938b91218a671030bd5a13c72f7dbe09488643961ace13"
+        },
+        {
+          "path": "Override/component-0043.txt",
+          "sourceGuid": "8c7d2975-348a-572e-b4ec-30f43897dc6a",
+          "sourceName": "Darth Malak's Armor",
+          "sha256": "264ee0b8b20e5aed9e4e4c5a254218c0074caee51c0508888ebca49dbd76f34e"
+        },
+        {
+          "path": "Override/component-0044.txt",
+          "sourceGuid": "c9ba7c01-6125-515d-a5ec-e284a43cb9eb",
+          "sourceName": "Supermodel Fix",
+          "sha256": "cdfe9118e6e9587936c81e305dbf8c2b3c2ff80d2b407828ed0d133f795c9a65"
+        },
+        {
+          "path": "Override/component-0045.txt",
+          "sourceGuid": "def892ea-6e67-5fc7-8ee0-bb6fc8f13c8b",
+          "sourceName": "Worn-Out Mando Armor",
+          "sha256": "0fcabf66b58b446462584bc9b38911c9ed32d3822ec246b6a0c1c4ffb060cc4d"
+        },
+        {
+          "path": "Override/component-0046.txt",
+          "sourceGuid": "a5219126-69ca-5cac-8219-cbf929843a7d",
+          "sourceName": "HD NPC Portraits",
+          "sha256": "e977f2a7b82f725f33453ee2f8e9667cca1f95000539be37dbd9c0e611fbd381"
+        },
+        {
+          "path": "Override/component-0047.txt",
+          "sourceGuid": "f2877144-3c80-54cb-9410-c6ed3bcd00a1",
+          "sourceName": "HD PC Portraits",
+          "sha256": "8e8c14912894f66f7209b4a677a80168fa5c99e4383b530d121c3f5f621fbb66"
+        },
+        {
+          "path": "Override/component-0048.txt",
+          "sourceGuid": "cddc71ea-89d6-55ce-8580-858bd6e297de",
+          "sourceName": "Stylized Portraits TSL",
+          "sha256": "39702b6ef05a598703c86b423d8ce802368d76b5b88f1fd4c80158f660238575"
+        },
+        {
+          "path": "Override/component-0049.txt",
+          "sourceGuid": "68c66418-032d-524b-bdd9-af3842b727a6",
+          "sourceName": "PFHC03 Restoration",
+          "sha256": "0158905f51c38f9e071266caa590cfeebba3d81cb3f03bfc245ab85c86b568f5"
+        },
+        {
+          "path": "Override/component-0050.txt",
+          "sourceGuid": "a54d346a-01bc-54ed-9093-2a80b98c6817",
+          "sourceName": "4K Atton",
+          "sha256": "fc5b708be0fdca3e75ac5addfaf2cd4dbc2f03fd70aa1bf768077fd4cb2c0540"
+        },
+        {
+          "path": "Override/component-0051.txt",
+          "sourceGuid": "614409eb-bedc-5343-ac1c-fb721eabab0a",
+          "sourceName": "Atton with Scruff",
+          "sha256": "a86b2c4509ce5b71864761d2b9015e23b752e8ed688fd58b68da7e3b05bb8da0"
+        },
+        {
+          "path": "Override/component-0052.txt",
+          "sourceGuid": "d41d8b62-50e6-5f0f-a78b-b1fdaaab0d56",
+          "sourceName": "Rounder G0-T0",
+          "sha256": "2328a16fa6238618fa46ce0a1548f9fc8975d2296607e3a5db46d280328148f6"
+        },
+        {
+          "path": "Override/component-0053.txt",
+          "sourceGuid": "db9bb158-ba3b-500c-8ef8-463d7eb18e8a",
+          "sourceName": "Dark Harbinger",
+          "sha256": "cf5a352cf581247f1d8fd69ebe1368f8316a3acc6efd7c893e1b98edf41859b2"
+        },
+        {
+          "path": "Override/component-0054.txt",
+          "sourceGuid": "798278f3-815f-50ea-a29a-59aa5ba6a397",
+          "sourceName": "HD Vrook",
+          "sha256": "80e59974f943f6e0f91ad19e94f463e857d74994dff9edecd16d45b46ee21905"
+        },
+        {
+          "path": "Override/component-0055.txt",
+          "sourceGuid": "4c3f0e84-1d1d-5729-9562-b7146a802311",
+          "sourceName": "HD Darth Nihilus",
+          "sha256": "9dfb35296a0c992aa441f4f17e1ec4ccfec54e9f4f661afa1c7089ac79d3dc27"
+        },
+        {
+          "path": "Override/component-0056.txt",
+          "sourceGuid": "e99a9c69-f073-587f-89f1-14675059dfaa",
+          "sourceName": "Darth Sion Remake",
+          "sha256": "2a951013bfde4a244e5626e2d38539c065e43491696572a10086be82c2f83fbe"
+        },
+        {
+          "path": "Override/component-0057.txt",
+          "sourceGuid": "7f86a7f7-c961-5f60-b814-4d44437c7462",
+          "sourceName": "Detran's Revan",
+          "sha256": "d5c9e1f7d0a9a4269f9834ad04d86c2e9620a1d669a2e64ed3ab5efbce22fb49"
+        },
+        {
+          "path": "Override/component-0058.txt",
+          "sourceGuid": "13064dc0-b532-5301-875b-11be8c731220",
+          "sourceName": "Lore-Friendly Mandalore",
+          "sha256": "8ff87f72dda0c52310f35ad077bfc450df8c7d5d3b3119f4e6534adf6b3cac8d"
+        },
+        {
+          "path": "Override/component-0059.txt",
+          "sourceGuid": "a24c3450-983b-5fdd-abb3-88615f157a71",
+          "sourceName": "Visas Reduced Model Clipping",
+          "sha256": "92e6ed23f3a1fecd69c85a28fa8e21928832f73957d9a6c5df232b4ee091846f"
+        },
+        {
+          "path": "Override/component-0060.txt",
+          "sourceGuid": "16daf03b-305d-59f0-96c3-64f212832ef5",
+          "sourceName": "HD Visas Marr",
+          "sha256": "a4e4d15285097b2b0b6b65f8dbb334b93b7182a940b59137cbd86aa71023c87e"
+        },
+        {
+          "path": "Override/component-0061.txt",
+          "sourceGuid": "8c4077fb-d656-55c8-8a3a-054886124f49",
+          "sourceName": "Mira Unpoofed",
+          "sha256": "23569183ce043fc1c00a0bbeeffdb6e13a992de7eb979bf83ad40900ff9081c5"
+        },
+        {
+          "path": "Override/component-0062.txt",
+          "sourceGuid": "dbc9c3f0-f672-5db5-b59d-7e23612eb70f",
+          "sourceName": "T3M4 HD 2K",
+          "sha256": "3b8faaa2365b47425bc72e1a5fd28b45a31afde2bc1600c51eb53cd4b9b0c5e0"
+        },
+        {
+          "path": "Override/component-0063.txt",
+          "sourceGuid": "6fc76d71-ba75-5770-a9ef-3a99417c4c64",
+          "sourceName": "HD Astromechs",
+          "sha256": "4bcb88281b985b7faafd36a27bcb08d1d3f71755a4c0741b33500d2edfe82b2a"
+        },
+        {
+          "path": "Override/component-0064.txt",
+          "sourceGuid": "1de55ad5-3597-57a9-bee2-cfa18b726adc",
+          "sourceName": "War Droid HD",
+          "sha256": "c8aef3d03fb7a7937c8bbc7a949735546776f00af35cbf4c15572339acc5b346"
+        },
+        {
+          "path": "Override/component-0065.txt",
+          "sourceGuid": "738c9d7a-4b94-58e0-b0e2-a20eff38ff88",
+          "sourceName": "HD Duros",
+          "sha256": "1fd8e04ba352b7dc2081da70b4b0d06e5510682721545b7cf329f9a55b4f1e7d"
+        },
+        {
+          "path": "Override/component-0066.txt",
+          "sourceGuid": "8a5c33c8-e6d5-5d86-9ba3-f54a28ca5d71",
+          "sourceName": "HD Ithorians",
+          "sha256": "89c209405c898c5cf90fd32f5660ed8fcb5f31f9c186561963d47894f7ad5f66"
+        },
+        {
+          "path": "Override/component-0067.txt",
+          "sourceGuid": "5175f6fa-3ca5-585e-b25f-6562053bc545",
+          "sourceName": "N_oldAMH01 HD",
+          "sha256": "ce70f19abfa898483ab63229605463ecc59abcc21baf9f2e5ac14514318202a8"
+        },
+        {
+          "path": "Override/component-0068.txt",
+          "sourceGuid": "48be03bb-a8b8-53a8-a5d3-1a9c310161ca",
+          "sourceName": "Canonical Jedi Exile",
+          "sha256": "6fa89553a1d06bf4ff3e0a735b8e0a46ee75f0b9e151974e96b201a935173aa2"
+        },
+        {
+          "path": "Override/component-0069.txt",
+          "sourceGuid": "84ecde5c-f903-5143-bf12-37c8ef5bcc52",
+          "sourceName": "Lightsaber Visual Effects",
+          "sha256": "9e1b6777ebdc26e1dcb71ab0c5ac0b105fcadb652e4e1979308a22a754edcd8c"
+        },
+        {
+          "path": "Override/component-0070.txt",
+          "sourceGuid": "e87f1950-7a98-5663-9ad8-73ce7de84ebf",
+          "sourceName": "Lightsaber Hilt Variety",
+          "sha256": "c9f6cce3472fafc868c40af5e116550a25e88b768e4d6d631b5e4f3f9858a3e0"
+        },
+        {
+          "path": "Override/component-0071.txt",
+          "sourceGuid": "83326858-aa28-5a86-9b49-24c1a182a369",
+          "sourceName": "Random Panels",
+          "sha256": "ec6bc56340da3cc7ddd13d5940c38bb26172502c7523d9cd9db079c355a0f894"
+        },
+        {
+          "path": "Override/component-0072.txt",
+          "sourceGuid": "f87bd4a2-577b-5ed7-ba39-584d4e69debd",
+          "sourceName": "Neglected Computer Panel",
+          "sha256": "6ccd4b32bfa885fc149c1a08055fbc2b9e8c5983e6f1ed951ca398dd343b3c57"
+        },
+        {
+          "path": "Override/component-0073.txt",
+          "sourceGuid": "faabb22f-e85a-52f4-afe4-3c00dc273147",
+          "sourceName": "Improved Peragus Asteroids",
+          "sha256": "0783a23ab5720c4254d690a6297cb8618080cce694c3d4ee9d59e72b171d9a86"
+        },
+        {
+          "path": "Override/component-0074.txt",
+          "sourceGuid": "7e4e92cd-fc14-5e52-8c97-23fc5a442d87",
+          "sourceName": "Swoop Monitor Replacement",
+          "sha256": "23b7960dd097be69d8062b4e3419e131b1f014d813a83637c4b664db25a75e99"
+        },
+        {
+          "path": "Override/component-0075.txt",
+          "sourceGuid": "ecbeab03-54e5-5a9b-9afa-c774170ab68c",
+          "sourceName": "HD Terminal Texture",
+          "sha256": "0af6d4664d023d8f3aec65566caeed7ccdb3294e32fae4166c3d9d4e18f6830d"
+        },
+        {
+          "path": "Override/component-0076.txt",
+          "sourceGuid": "4046bc49-e646-5f90-8f0e-cca265882620",
+          "sourceName": "Animated Computer Panel",
+          "sha256": "c66bc93077ecf7c32308e90efa9ef0c22e95cb8fcf2dac1c2e0b138c4df4d5f8"
+        },
+        {
+          "path": "Override/component-0077.txt",
+          "sourceGuid": "9c04941a-de0d-50a1-b1db-18d460f9af1c",
+          "sourceName": "HD Workbench",
+          "sha256": "5ede86542311a85afb416b6cecea185766c7ed5142c1f7097fce35ee17842576"
+        },
+        {
+          "path": "Override/component-0078.txt",
+          "sourceGuid": "e4cf2464-7e1d-52a5-82bc-79a8ce9c54e9",
+          "sourceName": "Backdrop Improvements",
+          "sha256": "41b58319b3b041fab0c8bbcaae98e2287fdd3416bd7b901ede7c729383bb7566"
+        },
+        {
+          "path": "Override/component-0079.txt",
+          "sourceGuid": "c6e04d12-316b-5232-8a7c-62e0126b4b4f",
+          "sourceName": "Citadel Station Backdrop",
+          "sha256": "137f5a22b14c9da0d8236afdd424a35a4ca963403c2fed16d12c2f758e37a87c"
+        },
+        {
+          "path": "Override/component-0080.txt",
+          "sourceGuid": "3b9c63fd-e493-59c7-82fd-2e902c410731",
+          "sourceName": "HQ Skyboxes II",
+          "sha256": "b4067fbb704a6af52dfedff9ed23c606474ea48096376e891598caee3063e2e2"
+        },
+        {
+          "path": "Override/component-0081.txt",
+          "sourceGuid": "71b6a015-ed9d-532c-b273-32cb1b6972dd",
+          "sourceName": "Ebon Hawk Cockpit Upgrade I",
+          "sha256": "ed8bd5b08dcc3cfcfb390c92223eb92eece21dc2084556474b813ca2b6fe3b54"
+        },
+        {
+          "path": "Override/component-0082.txt",
+          "sourceGuid": "8c9f604f-656d-576b-aa32-a742f795f69c",
+          "sourceName": "Ebon Hawk Cockpit Upgrade II",
+          "sha256": "e424c1434a4798d9cfa721876163570195a131633c2a4dfd68118e3f73e0f011"
+        },
+        {
+          "path": "Override/component-0083.txt",
+          "sourceGuid": "0101876e-b534-5075-a5bc-77b6c2fa4909",
+          "sourceName": "Spark Effect",
+          "sha256": "44a6f47555fc0459158493ae18ed06ecc6f978630164be0dbe56ced96f4ebd74"
+        },
+        {
+          "path": "Override/component-0084.txt",
+          "sourceGuid": "8d9917fe-2648-5ca2-9d0d-40af0bfd09a4",
+          "sourceName": "Transparent Cockpit Windows",
+          "sha256": "e0f2d52779bc00899ed0a8f21979c02d7527b6d3ceb3873666cf0b518b292527"
+        },
+        {
+          "path": "Override/component-0085.txt",
+          "sourceGuid": "d78d10a3-cdcf-5376-bcc7-d6c4169c555d",
+          "sourceName": "HD Cockpit Skyboxes",
+          "sha256": "e167df40169e476cbbc2a8f51d021b219036c56605aa9a4107c207e6bf8fe3d0"
+        },
+        {
+          "path": "Override/component-0086.txt",
+          "sourceGuid": "4d4e86d0-35d3-53b1-b2d6-7d0f474f1191",
+          "sourceName": "FTL Loop",
+          "sha256": "984a4aea8adf0708358e7009166e11bac8f9fefb7b39ff1e4a62835fa27ae7ad"
+        },
+        {
+          "path": "Override/component-0087.txt",
+          "sourceGuid": "7e30d317-f4ed-591a-b908-5042492253be",
+          "sourceName": "Aleema Keto's Robe Fix",
+          "sha256": "7159060968ead6e111401145c20898f8ad679a3260ab685cd67742a9fe089330"
+        },
+        {
+          "path": "Override/component-0088.txt",
+          "sourceGuid": "3c1c5637-2dbf-5bca-bc96-9f7b682ab21e",
+          "sourceName": "Short-Term Memory Fix",
+          "sha256": "12427aa2185c3150332a25572d4855bb57d6e4b9bc2cc31dd50dedf870d96bbc"
+        },
+        {
+          "path": "Override/component-0089.txt",
+          "sourceGuid": "3aa3f1fb-9b53-57e3-80b0-a36beca00d2a",
+          "sourceName": "Onderon News Makes Sense",
+          "sha256": "a2a39f652f85cea5bdf7ca89e685f4ac435ff17521208999deb551c09c4c2a9e"
+        },
+        {
+          "path": "Override/component-0090.txt",
+          "sourceGuid": "6b189d4a-3012-5d66-99b5-7c25b45cf574",
+          "sourceName": "Hawk Downloadable Map",
+          "sha256": "4f9f19c28735216787cf1877a5ef51845e89e4e9b66673830e30f276820d2e51"
+        },
+        {
+          "path": "Override/component-0091.txt",
+          "sourceGuid": "22aa8c89-dff5-5104-94d9-f220601783a0",
+          "sourceName": "Kinrath Egg Crystal Drop",
+          "sha256": "64d1b378e5319179eed0d739b59dfd6deaa2ab5ecfb9cde91d02ceebaf0dd3ae"
+        },
+        {
+          "path": "Override/component-0092.txt",
+          "sourceGuid": "a6fc3d45-0f1a-5942-b15e-2ea89829ccd1",
+          "sourceName": "Thorium Charge Mod",
+          "sha256": "91170278ce099f824c6f4811192aebd3a8014efcd891293a8d923fd496d5dcde"
+        },
+        {
+          "path": "Override/component-0093.txt",
+          "sourceGuid": "e114daec-1f82-5c20-b4e6-a2ac33fa7245",
+          "sourceName": "Kill the Ithorian",
+          "sha256": "759a147121c50ac49bffe288dd0652a4597a2e74c29e407dc71bfc960476bbce"
+        },
+        {
+          "path": "Override/component-0094.txt",
+          "sourceGuid": "0accefc0-4832-5459-944d-738796ed215f",
+          "sourceName": "Red Floating Lightsabers",
+          "sha256": "4ecc7c8817e6009e0792fb687f12e252612c6459dc59e4d7c21430b34cb73a22"
+        },
+        {
+          "path": "Override/component-0095.txt",
+          "sourceGuid": "b32a6f8f-58d7-5bca-914b-227917670510",
+          "sourceName": "Mira or Hanharr",
+          "sha256": "13cd44c0660d9d0dffa05190025dea9164c3b28415c6071e96b95d30e16442cc"
+        },
+        {
+          "path": "Override/component-0096.txt",
+          "sourceGuid": "af603c40-32e6-5e05-abdb-629455b3556e",
+          "sourceName": "Kreia's Fall Cutscene",
+          "sha256": "5e661130ca05300338ca40656e3bfe1c7cf1a73579de11d2c8c72d7393d730a1"
+        },
+        {
+          "path": "Override/component-0097.txt",
+          "sourceGuid": "1dbab514-da89-531e-b0ea-c45a975baf1f",
+          "sourceName": "PartySwap",
+          "sha256": "0043723a34b74a1bce7b1d3239c2a4b763dbf73b6d793dbfcd29a68b57f410fe"
+        },
+        {
+          "path": "Override/component-0098.txt",
+          "sourceGuid": "63f1fc3c-d980-5759-8ac7-089f586856c2",
+          "sourceName": "Extended Enclave",
+          "sha256": "12de5aa712638a1a69428d8d0ce823862da759266e702862d01f13dff5cf15ee"
+        },
+        {
+          "path": "Override/component-0099.txt",
+          "sourceGuid": "52380173-6fd0-58f7-a376-e4f19e9cd57a",
+          "sourceName": "PartySwap-EE Compatch",
+          "sha256": "820b7d5f49a0cae24bec0590bcfb234a6b4197a121f55cd1b939ec80e27edeff"
+        },
+        {
+          "path": "Override/component-0100.txt",
+          "sourceGuid": "3ffb0be7-ae0b-5102-9d95-0516b28048ad",
+          "sourceName": "Extended Korriban Arrival",
+          "sha256": "ff2e1899dec95c80017bd9593d28066d393843239337c20eba697f2faa7e8cd5"
+        },
+        {
+          "path": "Override/component-0101.txt",
+          "sourceGuid": "cc623ea3-f058-51b1-9221-45fc3d3a09ea",
+          "sourceName": "Prologue Item Recovery",
+          "sha256": "b7be7e442efd8edf8bd086f458432b2e0f5de414f1467fff7c8e5b745474dfd4"
+        },
+        {
+          "path": "Override/component-0102.txt",
+          "sourceGuid": "d476eac4-12f2-5513-a4e5-7315e16b226f",
+          "sourceName": "Balance Tweak Pack",
+          "sha256": "66786dbabfda3f27c46985797c6383a15de7b344c46c812359835f96e9282d76"
+        },
+        {
+          "path": "Override/component-0103.txt",
+          "sourceGuid": "0740f19d-bdcf-591a-97d4-0f6f442b6417",
+          "sourceName": "Mines Overhaul",
+          "sha256": "05b70388edea7932131e9dd06e93a5f8711b749d290216d6b03885218f551fff"
+        },
+        {
+          "path": "Override/component-0104.txt",
+          "sourceGuid": "fa922c2f-3d65-5973-9ea8-1d42e4422261",
+          "sourceName": "No Health Regeneration",
+          "sha256": "d7fdac72bb25a1edb643842eb1ea2492cb73d2dd528e3456982dbaef703657e2"
+        },
+        {
+          "path": "Override/component-0105.txt",
+          "sourceGuid": "de463212-bdc3-55b5-801b-20c07c456b87",
+          "sourceName": "Thematic Sith Lords",
+          "sha256": "4806a4d878119122bcc307370acd324d0ec3de9da4854fc3e9f3e832ed26a380"
+        },
+        {
+          "path": "Override/component-0106.txt",
+          "sourceGuid": "0dab200d-3bb0-5750-a5a0-4649bc9024de",
+          "sourceName": "Thematic Jedi Masters",
+          "sha256": "fe0f395bdaccbef3e98b3d6e8a13cd1f95211fe85c0b49b99a19586482bccebf"
+        },
+        {
+          "path": "Override/component-0107.txt",
+          "sourceGuid": "0174b50d-b41b-5ac3-8732-42e5339991b6",
+          "sourceName": "Better Disciple Meditation",
+          "sha256": "8d935e40e96b9411c17034fff8dab685bba087c23aa9e31d1bd12717dc76c6ee"
+        },
+        {
+          "path": "Override/component-0108.txt",
+          "sourceGuid": "034ae21a-93dc-5b2c-a8ba-2045c8402610",
+          "sourceName": "Bao-Dur & Heavy Armor",
+          "sha256": "4799f4635edf115131158d6b833f430b07ea9523e76ad226072a81ad2f71bb6e"
+        },
+        {
+          "path": "Override/component-0109.txt",
+          "sourceGuid": "42039518-c2aa-5cf9-a0eb-a41a14b85365",
+          "sourceName": "JC's Crystal Attunement",
+          "sha256": "a1e077340f6eae387a880c0d2306399e967c25bcba3d8fd5727fffd4aa17dd3e"
+        },
+        {
+          "path": "Override/component-0110.txt",
+          "sourceGuid": "6938dfa3-42df-541b-be0b-32824608c765",
+          "sourceName": "Jekk'Jekk'Tarr Thugs",
+          "sha256": "30e1a028ffcb28edb9836d549a153e0b163ea09cbee5d385e9720a82819facfa"
+        },
+        {
+          "path": "Override/component-0111.txt",
+          "sourceGuid": "1bc18544-647f-5b98-b7c5-7a026ac598d4",
+          "sourceName": "Logical Jekk'Jekk Tarr",
+          "sha256": "54caeb791fb5e7c9e78967b40ced86e3f6d5884aa26ef417367630a1f23c0b5a"
+        },
+        {
+          "path": "Override/component-0112.txt",
+          "sourceGuid": "7e250a91-9789-5a9c-859e-1545f8560290",
+          "sourceName": "Mira's Vanilla Escape",
+          "sha256": "dc3151b5bbbbdd4aa346ace3dd2e5f314429c1001117857899a1eafbdd28fd42"
+        },
+        {
+          "path": "Override/component-0113.txt",
+          "sourceGuid": "82c6c8b1-a44e-5c9f-aac5-d4eabd40611f",
+          "sourceName": "Kreia's Longsword",
+          "sha256": "e49a6c38e68ffdf400acc16c84921f1924acc231c2d98d758ef195860adac5ee"
+        },
+        {
+          "path": "Override/component-0114.txt",
+          "sourceGuid": "ad059813-42af-5d73-8c2d-45c529101bfd",
+          "sourceName": "Harbinger Performance Fix",
+          "sha256": "9d449d6103bf4a801dae5583de5dc22ab7e94f5f3faa854fc1dc822f3c6746c4"
+        },
+        {
+          "path": "Override/component-0115.txt",
+          "sourceGuid": "3fc08659-1637-5afd-ba5b-4152db43c95a",
+          "sourceName": "Visas VO Tweak",
+          "sha256": "c5f114be6a67a64fae73f97aa4217900445befddbb0d8a2e42f1bd67c1cd1478"
+        },
+        {
+          "path": "Override/component-0116.txt",
+          "sourceGuid": "67b6bff2-5363-5221-8f20-411a1830c63a",
+          "sourceName": "Sion and a Male Exile",
+          "sha256": "d1b96d1c5a19a57fddc9c28c5e09f5c6a4f7bb16d8bed6d5067fec42d39b61d3"
+        },
+        {
+          "path": "Override/component-0117.txt",
+          "sourceGuid": "c5d9dbd1-d05d-5afb-98e6-a71bd886c0ec",
+          "sourceName": "Assassins with Lightsabers",
+          "sha256": "5a03bfd9be747c641a49e586b92e2ab180b960ba70c4d1b091083d772e1bb2df"
+        },
+        {
+          "path": "Override/component-0118.txt",
+          "sourceGuid": "f58a1946-16d8-53ce-b580-8deaf00c8ecd",
+          "sourceName": "True Sith Assassins",
+          "sha256": "3292ae15e664641e55c07a43d45f2613a6f9714acc87e08d183b1d144467cd7d"
+        },
+        {
+          "path": "Override/component-0119.txt",
+          "sourceGuid": "80684497-56ae-5fb0-a82a-4e262295aa25",
+          "sourceName": "For Mandalore!",
+          "sha256": "45d66023a93a63b3d6924dc5ce5268d2ca14c73494bc8baef6265d07f98e2113"
+        },
+        {
+          "path": "Override/component-0120.txt",
+          "sourceGuid": "1cc25b80-c70d-5fb7-98b1-d9bb07e95cb3",
+          "sourceName": "Peragus Medical Bay Enhancement",
+          "sha256": "59cfefa69116d21f291284f30cf3cae22d623c440f01d1bcb17f91eec51bc5fa"
+        },
+        {
+          "path": "Override/component-0121.txt",
+          "sourceGuid": "8a60ec4b-f3df-5064-b577-4bdeaea67484",
+          "sourceName": "HQ Blasters",
+          "sha256": "a2aa8df655f37a830145a6749edd00b2983b7524e960d13ebcfa4ff650a596da"
+        },
+        {
+          "path": "Override/component-0122.txt",
+          "sourceGuid": "3ec8226d-fb44-503d-a292-984857b66c5a",
+          "sourceName": "Droid Model Fix",
+          "sha256": "49d5ec5f449c0890dcd63873e6ce271690a7c7dfe5e34f57b5d8be293fe51d7b"
+        },
+        {
+          "path": "Override/component-0123.txt",
+          "sourceGuid": "b8086b9c-b672-5532-aa9b-ffdba50fb57b",
+          "sourceName": "Quarterstaff Replacements",
+          "sha256": "c9548e3d4fe9b87879aee50ef0e778427ea0ce9fca7769216682c6087efb9c33"
+        },
+        {
+          "path": "Override/component-0124.txt",
+          "sourceGuid": "1b3c2717-8ebb-5db4-9f5f-eda0ade787cd",
+          "sourceName": "Upscaled Icon Overhaul",
+          "sha256": "3a094bc9a272ca4fcd31c9adf631bb25aa77b11cedcc8449564d851a72898575"
+        },
+        {
+          "path": "Override/component-0125.txt",
+          "sourceGuid": "be25ffb8-f3f1-5f23-9159-ce43aa1ffdba",
+          "sourceName": "Rescaled Trandoshans",
+          "sha256": "fa3ccbc478aeb39e9c985a9745af93fd25d2ae6f0608504a601a902ba839c15f"
+        },
+        {
+          "path": "Override/component-0126.txt",
+          "sourceGuid": "d8136628-8211-5107-9cb3-ba419389e9a6",
+          "sourceName": "Visually Repair HK",
+          "sha256": "f3de96bc985be047d4c94b26f34d20239ba86459d6fe7300b1ec61f03e8ec148"
+        },
+        {
+          "path": "Override/component-0127.txt",
+          "sourceGuid": "a45d15c2-9b42-5ef3-8dee-681e19bed13c",
+          "sourceName": "Expanded Ending",
+          "sha256": "6809e8c0b85b4914f472e3437d0537fd775e137a1f294bff89ee0bb18b84c2e7"
+        },
+        {
+          "path": "Override/component-0128.txt",
+          "sourceGuid": "aa83fa1b-87c9-58b6-9d11-948bcf6fd800",
+          "sourceName": "Consistent Bastila Recognition",
+          "sha256": "5a26b7ba86ff6e0f8a8dfeee6f37d61f9bb8d7d7183defcb5ffd56b8b41752ed"
+        },
+        {
+          "path": "Override/component-0129.txt",
+          "sourceGuid": "10fb89f0-e193-5ac8-b5bd-1e8b8ea0d1c8",
+          "sourceName": "Handmaiden Fit Model",
+          "sha256": "9ff7bb7d6d19dc1246121b05cb8ce70877f79007411fc3db7095eb2c11cac9cf"
+        },
+        {
+          "path": "Override/component-0130.txt",
+          "sourceGuid": "87120693-4161-59a5-874a-8366909124d4",
+          "sourceName": "JC's Handmaiden Sisters",
+          "sha256": "51957ba921bcd014b65dbeaa35979d8302fb6d42e4a5f51cb5722569412c888f"
+        },
+        {
+          "path": "Override/component-0131.txt",
+          "sourceGuid": "19034423-0618-56b0-9ec1-b504f709fe60",
+          "sourceName": "Replacement Loadscreens",
+          "sha256": "64439f14bef7688ff7c2e7756601519753cc179135c7d74559b1f5940f8fca7c"
+        },
+        {
+          "path": "Override/component-0132.txt",
+          "sourceGuid": "826d50c8-ba56-5fb6-ab1d-45b501ca548c",
+          "sourceName": "Vibrocutter Changes",
+          "sha256": "b7ac783d20df36084c1dd3196c7ae6244823400b7e90e42b4bffd8f682bf80ed"
+        },
+        {
+          "path": "Override/component-0133.txt",
+          "sourceGuid": "c4fb3847-d93e-5858-8892-95881f190d4b",
+          "sourceName": "Peragus Monitor Adjust",
+          "sha256": "cfb97d4749b70e742b33ce7182c1c8638b88998f2d16859fd18b435b33c6a05f"
+        },
+        {
+          "path": "Override/component-0134.txt",
+          "sourceGuid": "c37e5398-79c5-58cb-883a-a94dddfab120",
+          "sourceName": "Replacement Peragus II",
+          "sha256": "602037bf26358ad94c771ceae0efbfc8bee962392bcd91e8258e62989ade6df8"
+        },
+        {
+          "path": "Override/component-0135.txt",
+          "sourceGuid": "e2a0d7c6-8f17-5c02-b404-d825de1097b1",
+          "sourceName": "TSL Galaxymap Fixpack",
+          "sha256": "1d1f8e79c58074823d9968ceb57ac301f51287e6e67dee5d30bd60acbab5fd8e"
+        },
+        {
+          "path": "Override/component-0136.txt",
+          "sourceGuid": "bd90073b-0364-5882-a497-ee0183148b1c",
+          "sourceName": "Fixed Hologram Models",
+          "sha256": "e6ffb428cce7f1a9e5fa5e754dcea851b559c4f01ad157dbc06b28ff53e02020"
+        },
+        {
+          "path": "Override/component-0137.txt",
+          "sourceGuid": "3e3bfb0d-b11d-57cc-87e4-fd1114da0a7d",
+          "sourceName": "Relighting TSL",
+          "sha256": "4f0039e28789859f10b5fa8baf104f75365a14474f7771632ba7a227ce5d2ad6"
+        },
+        {
+          "path": "Override/component-0138.txt",
+          "sourceGuid": "57efb80a-26d1-507c-bbca-4ed3d2bad627",
+          "sourceName": "Companion Clothes",
+          "sha256": "2f17e2bca2d42f2339132858f8fad2129d083120e7d3f913abb8b457d3b86763"
+        },
+        {
+          "path": "Override/component-0139.txt",
+          "sourceGuid": "26269e71-42d8-547a-9a88-685fabb32105",
+          "sourceName": "Improved Enlightenment/Corruption",
+          "sha256": "9d4d666bd1652a82a7c880b5390b207a9682813149bd1eab67a7121515dd4b31"
+        },
+        {
+          "path": "Override/component-0140.txt",
+          "sourceGuid": "564cdf29-627c-5e72-baec-41fd6f0382a0",
+          "sourceName": "Repair Affects Stun Droid",
+          "sha256": "3e829376ae7ae8f61546f088c79c63921c4ac9295a9df9e85c6671ce30c1c45a"
+        },
+        {
+          "path": "Override/component-0141.txt",
+          "sourceGuid": "79408a01-b5b3-5537-99a1-c94d29aa26b1",
+          "sourceName": "Improved Force Sight",
+          "sha256": "dc251d13e3c27f82195b930872f3229ed47165f4f5376b5f2a1f7582d2706a24"
+        },
+        {
+          "path": "Override/component-0142.txt",
+          "sourceGuid": "7f01ce5e-3b5c-5915-b115-7523b08f1ea1",
+          "sourceName": "Alignment Affects Force Powers",
+          "sha256": "7b7bf3244b5841f74efc190c7251822b2c13d733adfa1db072fc1a9967b8b3f7"
+        },
+        {
+          "path": "Override/component-0143.txt",
+          "sourceGuid": "3c1619b0-143a-5951-b461-350f13dac801",
+          "sourceName": "Ultimate Character Overhaul Patches",
+          "sha256": "2576dbce19e8187eb456c29332f847112764115719d5fe08916037df0b9580b2"
+        },
+        {
+          "path": "Override/component-0144.txt",
+          "sourceGuid": "9c676b12-fe2a-5bba-adc3-6e101b142ad1",
+          "sourceName": "Bao-Dur/Darth Maul",
+          "sha256": "9581da077b72e4ed0a00eac1dfd5b6faf759afd233b941c3596c65809c283881"
+        },
+        {
+          "path": "Override/component-0145.txt",
+          "sourceGuid": "1107e72d-9384-5093-803e-724d988576e3",
+          "sourceName": "Realistic Visual Effects",
+          "sha256": "6cc3b83af360cb1afbaacb72fc2215d7f7b909314bee1e3b0f596acb22bf3cfb"
+        },
+        {
+          "path": "Override/component-0146.txt",
+          "sourceGuid": "886826e5-e451-58a6-be86-2462dfb7e2bc",
+          "sourceName": "Remove Duplicate TGA/TPC",
+          "sha256": "c7872c0f9812414718e94409799d7b48dfb6df9d16554c51daee051382041ed1"
+        },
+        {
+          "path": "Override/component-0147.txt",
+          "sourceGuid": "fcf675c1-0d85-5340-9303-f59af7e33051",
+          "sourceName": "TOMB",
+          "sha256": "4aed70a866b1ae622b02298f14e3f48ba4ac77839893415db9b89c3e8c8a90b0"
+        },
+        {
+          "path": "Override/component-0148.txt",
+          "sourceGuid": "d7c1dba9-7cf5-5529-aa2f-da29ff420d9a",
+          "sourceName": "Character Textures & Model Fixes",
+          "sha256": "2c8627ac2827ba40fbbaf552b1bc4d43df7891d1333fedd148a9e3a907ac4906"
+        },
+        {
+          "path": "Override/component-0149.txt",
+          "sourceGuid": "2f4831a4-9b13-5503-84eb-b9ed9d08847e",
+          "sourceName": "Main Menu Fix",
+          "sha256": "41f37925218e4e14f36ed4dcfe2042ac2881c22460a407870edabbb2fa05ff20"
+        },
+        {
+          "path": "Override/component-0150.txt",
+          "sourceGuid": "fc637fa9-3ed5-523a-bc62-61ca2e96098e",
+          "sourceName": "K2 Cutscenes Rescaled",
+          "sha256": "64a3f1bd9b57c474b5395f7fdef69252385ce02f5817ec81016d243473498745"
+        },
+        {
+          "path": "Override/component-0151.txt",
+          "sourceGuid": "c57400a3-83ee-5050-bee2-12cfb79e5a99",
+          "sourceName": "K2 Remastered Cutscenes",
+          "sha256": "ff0c6b0e84f7245b9cf94aaa4b224a4c8fa046165d65466416653c7d24478afd"
+        },
+        {
+          "path": "Override/component-0152.txt",
+          "sourceGuid": "fefef1be-875d-5cc1-8a8a-af9e29c8cf76",
+          "sourceName": "Loading Screen Rescaled",
+          "sha256": "e6529970e37b8b5e9293fa057e75dff48d93530c8985cdb26072888847348e9d"
+        },
+        {
+          "path": "Override/component-0153.txt",
+          "sourceGuid": "be993942-942e-5e84-a22e-dff31a7f00b4",
+          "sourceName": "Workbench Camera Tweak",
+          "sha256": "ee40ce8f7963468da4d0f472d007d636da4bbbd2ab2dff56817fd038bd518489"
+        },
+        {
+          "path": "Override/component-0154.txt",
+          "sourceGuid": "66533dc6-96f3-5f45-8f01-f4eb715640be",
+          "sourceName": "Upscaled Maps",
+          "sha256": "65eb03fe996a82317f389cc9d2b5af024b8dc21aab44ec3a03618f8bc3a03f77"
+        }
+      ],
+      "dryRunNoWrites": true,
+      "baselineRollbackVerified": true,
+      "statement": "Source mapped synthetic archive and file mechanics only. Patcher/Execute/prose omissions remain unverified."
+    }
+  ]
+}

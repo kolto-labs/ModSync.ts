@@ -7,13 +7,16 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "pnpm run build && electron dist/main.js",
-    "start": "electron dist/main.js"
+    "start": "electron dist/main.js",
+    "prepare:package": "node scripts/prepare-package.mjs",
+    "package": "pnpm run prepare:package && electron-packager out/app ModSync --out=release --overwrite --asar"
   },
   "dependencies": {
     "@modsync/core": "workspace:*",
     "@modsync/server": "workspace:*"
   },
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "@electron/packager": "^18.3.6"
   }
 }

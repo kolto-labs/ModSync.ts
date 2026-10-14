@@ -23,13 +23,12 @@ to the server as `POST /api/downloads/nxm { url }`.
 | `src/ipc.ts` | `ipcMain.handle` implementations (`dialog.showOpenDialog`, `shell.openExternal`); also the `electronBridge` object given to the server. |
 | `src/bridge.ts` | Shared `ModSyncBridge` type and IPC channel names. |
 | `src/global.d.ts` | Declares `window.modsync` for TypeScript consumers. |
-| `src/server-shim.d.ts` | Temporary ambient typing for `@modsync/server`; delete once that package builds. |
 
 `tsc` (NodeNext) emits `src/main.ts` -> `dist/main.js` (ESM) and `src/preload.cts` -> `dist/preload.cjs`.
 
 ## Running
 
-No `electron-builder` / packaging step exists yet; the app runs from the built sources.
+Build the workspace before starting the desktop shell.
 
 ```sh
 # from the repo root
@@ -61,3 +60,20 @@ When launched through the `electron` binary (not a packaged app), `main.ts` regi
 `nxm://` with the script path included (`electron <path>/dist/main.js`). On Linux this
 requires a `.desktop` entry to be honoured by the desktop environment; on Windows and macOS
 `app.setAsDefaultProtocolClient` is enough.
+
+## Portable desktop packaging
+
+Run `pnpm build` at the repository root, then `pnpm --filter @modsync/electron package`.
+The staging script copies built workspace packages, runtime dependencies (including archive
+WASM assets), and the web bundle into `out/app` without workspace symlinks. Electron Packager
+creates the portable app in this package's `release/` directory for the current platform.
+You can pass platform options directly with
+`pnpm --filter @modsync/electron exec electron-packager out/app ModSync --out=release --overwrite --asar --platform=linux --arch=x64`
+after `prepare:package`. Signing, notarization, and OS installers require platform release credentials
+and are separate release steps.
+
+The Linux artifact runs with `./release/ModSync-linux-x64/ModSync` from this package.
+The packaged directory includes Electron/Chromium license notices, while the app archive
+contains the project GPL license and `THIRD-PARTY-NOTICES.txt` with dependency license texts.
+The prepare step verifies JavaScript/CSS references in the built web index and keeps the
+previous staging directory intact if prerequisites or dependency copying fail.

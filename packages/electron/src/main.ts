@@ -17,11 +17,13 @@ import { IPC } from "./bridge.js";
 import { electronBridge, isSafeExternalUrl, pickFile, registerIpcHandlers } from "./ipc.js";
 
 const NXM_SCHEME = "nxm";
-const GITHUB_URL = "https://github.com/th3w1zard1/KOTORModSync";
+const GITHUB_URL = "https://github.com/bodencrouch/ModSync.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Built web bundle: `packages/web/dist`, resolved relative to `packages/electron/dist`. */
-const STATIC_DIR = path.resolve(__dirname, "../../web/dist");
+const STATIC_DIR = app.isPackaged
+  ? path.join(app.getAppPath(), "web")
+  : path.resolve(__dirname, "../../web/dist");
 const PRELOAD = path.join(__dirname, "preload.cjs");
 
 // ---------------------------------------------------------------------------
@@ -29,6 +31,11 @@ const PRELOAD = path.join(__dirname, "preload.cjs");
 // instance quits immediately and its argv (possibly an nxm:// link) is
 // delivered to the primary through the `second-instance` event.
 // ---------------------------------------------------------------------------
+// Automated or portable sessions can choose an isolated profile before the
+// singleton lock is acquired; ordinary launches retain Electron's default.
+if (process.env.MODSYNC_USER_DATA_DIRECTORY) {
+  app.setPath("userData", path.resolve(process.env.MODSYNC_USER_DATA_DIRECTORY));
+}
 const hasLock = app.requestSingleInstanceLock();
 if (!hasLock) {
   app.quit();
@@ -37,6 +44,8 @@ if (!hasLock) {
 let server: ModSyncServer | undefined;
 let baseUrl: string | undefined;
 let mainWindow: BrowserWindow | undefined;
+let quitting = false;
+let startupTask: Promise<void> | undefined;
 const token = randomBytes(32).toString("hex");
 
 /** nxm:// links that arrived before the server was listening. */
@@ -190,6 +199,7 @@ function createWindow(): BrowserWindow {
 }
 
 function ensureWindow(): BrowserWindow {
+  if (quitting) throw new Error("ModSync is shutting down");
   if (!mainWindow || mainWindow.isDestroyed()) mainWindow = createWindow();
   return mainWindow;
 }
@@ -206,14 +216,14 @@ async function menuOpenInstructionFile(): Promise<void> {
       { name: "All files", extensions: ["*"] },
     ],
   });
-  if (!file) return;
+  if (!file || quitting) return;
   try {
     const res = await apiPost("/api/file/load", { path: file });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`HTTP ${res.status} ${text}`.trim());
     }
-    ensureWindow().webContents.send(IPC.fileLoaded, file);
+    if (!quitting) ensureWindow().webContents.send(IPC.fileLoaded, file);
   } catch (err) {
     dialog.showErrorBox("Could not open instruction file", String(err));
   }
@@ -233,7 +243,7 @@ function buildMenu(): void {
       {
         label: "Open Editor",
         accelerator: "CmdOrCtrl+E",
-        click: () => void ensureWindow().loadURL(appUrl({}, "editor")),
+        click: () => { if (!quitting) void ensureWindow().loadURL(appUrl({}, "editor")); },
       },
       { type: "separator" },
       {
@@ -310,7 +320,7 @@ function buildMenu(): void {
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-async function startServer(): Promise<string> {
+async function startServer(): Promise<string | undefined> {
   if (!existsSync(STATIC_DIR)) {
     console.warn(
       `[modsync] web bundle not found at ${STATIC_DIR}; build it with "pnpm --filter @modsync/web build".`,
@@ -320,24 +330,26 @@ async function startServer(): Promise<string> {
     token,
     staticDir: STATIC_DIR,
     electronBridge,
+    settingsPath: process.env.MODSYNC_SETTINGS_PATH,
+    onShutdownStage: (stage) => console.info(`[modsync] server shutdown: ${stage}`),
   });
-  return server.listen(0, "127.0.0.1");
+  if (quitting) return undefined;
+  const address = await server.listen(0, "127.0.0.1");
+  return quitting ? undefined : address;
 }
 
 async function stopServer(): Promise<void> {
   const s = server;
-  server = undefined;
-  baseUrl = undefined;
   if (!s) return;
-  try {
-    await s.close();
-  } catch (err) {
-    console.error(`[modsync] error closing server: ${String(err)}`);
-  }
+  await s.close();
+  if (server === s) server = undefined;
+  baseUrl = undefined;
+  console.info("[modsync] local server closed");
 }
 
 if (hasLock) {
-  app.whenReady().then(async () => {
+  startupTask = app.whenReady().then(async () => {
+    if (quitting) return;
     registerIpcHandlers();
     registerNxmProtocol();
 
@@ -349,6 +361,7 @@ if (hasLock) {
       return;
     }
 
+    if (quitting) return;
     buildMenu();
     ensureWindow();
 
@@ -358,6 +371,7 @@ if (hasLock) {
     flushPendingNxm();
 
     app.on("activate", () => {
+      if (quitting) return;
       if (BrowserWindow.getAllWindows().length === 0) ensureWindow();
     });
   }).catch((err) => {
@@ -366,17 +380,38 @@ if (hasLock) {
   });
 }
 
-let quitting = false;
+let shutdownComplete = false;
+let shutdownTask: Promise<void> | undefined;
+
+function requestShutdown(): void {
+  if (shutdownTask) return;
+  quitting = true;
+  console.info("[modsync] shutdown requested");
+  // Disconnect renderer clients before draining the server. All quit paths
+  // share this task; repeated events cannot bypass an unfinished close.
+  for (const win of BrowserWindow.getAllWindows()) win.destroy();
+  shutdownTask = (async () => {
+    await startupTask;
+    await stopServer();
+  })().then(() => {
+    shutdownComplete = true;
+    console.info("[modsync] shutdown complete");
+    app.quit();
+  }).catch((err) => {
+    console.error(`[modsync] shutdown failed: ${String(err)}`);
+    app.exit(1);
+  });
+}
 
 app.on("window-all-closed", () => {
-  if (process.platform === "darwin") return;
-  void stopServer().finally(() => app.quit());
+  if (quitting || process.platform === "darwin") return;
+  requestShutdown();
 });
 
 app.on("before-quit", (event) => {
-  if (quitting || !server) return;
-  // Give the server a chance to shut down cleanly, then really quit.
+  if (shutdownComplete || !hasLock) return;
   event.preventDefault();
-  quitting = true;
-  void stopServer().finally(() => app.quit());
+  requestShutdown();
 });
+
+app.on("will-quit", () => console.info("[modsync] will-quit"));

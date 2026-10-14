@@ -185,7 +185,10 @@ export function read2da(bytes: Uint8Array): TwoDA {
   const cell = (off: number): string => {
     let s = cache.get(off);
     if (s === undefined) {
-      const sub = new BinaryReader(bytes, dataStart + off);
+      if (off >= dataSize) throw new TwoDAError(`2DA cell offset ${off} is outside the data block (${dataSize} bytes)`);
+      const block = bytes.subarray(dataStart, dataStart + dataSize);
+      if (block.indexOf(0, off) < 0) throw new TwoDAError(`unterminated 2DA cell at offset ${off}`);
+      const sub = new BinaryReader(block, off);
       s = sub.cstring();
       cache.set(off, s);
     }

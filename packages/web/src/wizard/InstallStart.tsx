@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal } from "../components/Modal";
-import { effectiveSelectedMods, modName, useAppState } from "../state/store";
+import { actions, effectiveSelectedMods, modName, useAppState } from "../state/store";
 import { goNext } from "./navigation";
 
 type Stage = 0 | 1 | 2 | 3;
@@ -15,6 +15,7 @@ export function InstallStart() {
 
   const finish = () => {
     setStage(0);
+    void actions.startInstall("base");
     goNext();
   };
 

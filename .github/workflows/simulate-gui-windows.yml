@@ -1,0 +1,45 @@
+name: Synthetic native GUI simulation (windows)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: synthetic-gui-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-electron:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout reviewed mod-build guide corpus
+        uses: actions/checkout@v4
+        with:
+          repository: kolto-labs/mod-builds
+          ref: 21b2f0499d28ecd4ee2092701dee5792ba5da4b9
+          path: guide-corpus
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Verify complete pinned Electron runtime
+        run: node tools/ensure-electron-runtime.mjs
+      - name: "Click native wizard: pinned full.md audit and synthetic source-mapped installs"
+        run: pnpm exec tsx tools/electron-clickthrough.ts --corpus guide-corpus --output artifacts/gui-windows
+      - name: Upload source mappings, screenshots, traces, logs and file hashes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-native-gui-windows
+          path: artifacts/gui-windows
+          if-no-files-found: error
+          retention-days: 14

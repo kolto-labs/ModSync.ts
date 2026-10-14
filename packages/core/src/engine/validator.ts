@@ -219,7 +219,7 @@ export async function validate(
     for (const instr of instructions) {
       if (instr.action !== "Extract") continue;
       for (const raw of instr.source) {
-        let matched: string[] = [];
+        let matched: string[];
         try {
           matched = await resolveWildcards(baseFs, ctx.resolver.resolve(raw));
         } catch {

@@ -59,7 +59,7 @@ export function normalizeInstructionFile(raw: unknown): ParsedDocument {
 /** Parse TOML, markdown or JSON text, detecting the format from the hint or the content. */
 export function parseDocument(text: string, hint?: { extension?: string; sourceUrl?: string }): ParsedDocument {
   const ext = hint?.extension?.toLowerCase();
-  const trimmed = text.replace(/^﻿/, "").trimStart();
+  const trimmed = text.replace(/^\uFEFF/, "").trimStart();
   const asMarkdown = (): ParsedDocument => {
     const res = parseMarkdownBuild(text, { sourceUrl: hint?.sourceUrl });
     return { ...res, kind: "markdown" };

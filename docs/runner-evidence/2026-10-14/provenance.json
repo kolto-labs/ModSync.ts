@@ -1,0 +1,27 @@
+{
+  "implementationCommit": "5ba6c4a706aac626a9eec9e58ec20cb183b22068",
+  "workingTreeDirty": false,
+  "workingTreeDirtyScope": "tracked implementation files; generated/untracked corpus and artifact directories are excluded",
+  "toolEntrySha256": "44b42a1a9401cdec6691cbd86ad268b510d08cdca73c54db9875c02929185c4a",
+  "lockfileSha256": "1cd4fbd8945a413df227f782cde1ef726cfb3730d81c19e28fa08c86df11be10",
+  "cliEntry": {
+    "path": "/workspace/scratch/session-runners/modsync-session-ts-cli-final/_work/ModSync.ts/ModSync.ts/packages/cli/dist/main.js",
+    "sha256": "e1c206fff41524682dd7a289a487ac4454248181fadb8554cfd287211ffe0608"
+  },
+  "runtime": {
+    "node": "v24.19.0",
+    "platform": "linux",
+    "architecture": "x64"
+  },
+  "argv": [
+    "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "/workspace/scratch/session-runners/modsync-session-ts-cli-final/_work/ModSync.ts/ModSync.ts/tools/synthetic-modbuild.ts",
+    "--corpus",
+    "corpus",
+    "--output",
+    "artifacts/synthetic-cli",
+    "--game",
+    "both"
+  ],
+  "corpusCommit": "21b2f0499d28ecd4ee2092701dee5792ba5da4b9"
+}

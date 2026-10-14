@@ -113,6 +113,8 @@ export async function listNamespaces(tslpatchdataDir: string, fs: FileSystemPort
 export function patcherFsFromPort(fs: FileSystemPort): PatcherFs {
   return {
     exists: (p) => fs.exists(p),
+    ...(fs.isSymbolicLink ? { isSymbolicLink: (p: string) => fs.isSymbolicLink!(p) } : {}),
+    ...(fs.realpath ? { realpath: (p: string) => fs.realpath!(p) } : {}),
     readFile: (p) => fs.readFile(p),
     writeFile: (p, data) => fs.writeFile(p, data),
     mkdirp: (p) => fs.mkdirp(p),

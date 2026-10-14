@@ -23,6 +23,7 @@ export function registerInstallRoutes(app: FastifyInstance, state: AppState): vo
     const answer: UserPromptAnswer = { promptId };
     const choiceId = optionalString(body, "choiceId");
     if (choiceId !== undefined) answer.choiceId = choiceId;
+    if (body.accepted !== undefined && typeof body.accepted !== "boolean") throw new HttpError(400, "accepted must be a boolean");
     if (typeof body.accepted === "boolean") answer.accepted = body.accepted;
     state.answerPrompt(answer);
     return { ok: true };

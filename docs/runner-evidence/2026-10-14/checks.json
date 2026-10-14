@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "command": "corepack pnpm check",
+  "testFiles": 47,
+  "tests": 413,
+  "build": true,
+  "typecheck": true,
+  "lint": true,
+  "sourceCommit": "71708b4",
+  "platform": "linux",
+  "log": "/workspace/scratch/ts-check-profile-final.log"
+}

@@ -4,7 +4,7 @@
  * and odd working directories cannot break resolution.
  */
 
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,9 +12,9 @@ import path from "node:path";
 import { createExtractorFromFile } from "node-unrar-js";
 import type { FileHeader } from "node-unrar-js";
 
-import { joinPath, normalizePath } from "../fs/paths.js";
-import type { ArchiveEntry, ArchiveReader } from "../ports/archive.js";
-import { ArchiveEntryNotFoundError, ArchiveError, findEntry, normalizeEntryPath, sortEntries } from "./common.js";
+import { normalizePath } from "../fs/paths.js";
+import type { ArchiveEntry, ArchiveExtractOptions, ArchiveReader } from "../ports/archive.js";
+import { ArchiveEntryNotFoundError, ArchiveError, extractThroughStaging, findEntry, normalizeEntryPath, sortEntries } from "./common.js";
 
 const require = createRequire(import.meta.url);
 
@@ -63,29 +63,14 @@ export class RarArchive implements ArchiveReader {
     return (await this.records()).map(({ path: p, isDirectory, size }) => ({ path: p, isDirectory, size }));
   }
 
-  async extract(destDir: string, filter?: (entry: ArchiveEntry) => boolean): Promise<string[]> {
-    const dest = normalizePath(destDir);
-    await mkdir(dest, { recursive: true });
-    const records = await this.records();
-    const selected = new Map<string, RarEntryRecord>();
-    for (const r of records) if (!filter || filter(r)) selected.set(r.rawName, r);
-    if (selected.size === 0) return [];
-
-    const written: string[] = [];
-    for (const r of selected.values()) {
-      if (r.isDirectory) await mkdir(joinPath(dest, r.path), { recursive: true });
-    }
-    const extractor = await this.extractor(dest);
-    try {
+  async extract(destDir: string, filter?: (entry: ArchiveEntry) => boolean, options: ArchiveExtractOptions = {}): Promise<string[]> {
+    const records = (await this.records()).filter((entry) => !filter || filter(entry));
+    const selected = new Map(records.map((entry) => [entry.rawName, entry]));
+    return extractThroughStaging(normalizePath(destDir), records, async (temp) => {
+      const extractor = await this.extractor(temp);
       const result = extractor.extract({ files: (header) => selected.has(header.name) });
-      for (const file of result.files) {
-        const record = selected.get(file.fileHeader.name);
-        if (record && !record.isDirectory) written.push(joinPath(dest, record.path));
-      }
-    } catch (err) {
-      throw new ArchiveError(`Failed to extract "${this.archivePath}": ${(err as Error).message}`, this.archivePath, { cause: err });
-    }
-    return written;
+      for (const _file of result.files) options.signal?.throwIfAborted();
+    }, options);
   }
 
   async readEntry(entryPath: string): Promise<Uint8Array> {
@@ -114,6 +99,11 @@ export class RarArchive implements ArchiveReader {
         wasmBinary,
         filepath: this.archivePath,
         targetPath,
+        filenameTransform: (name) => {
+          const normalized = normalizeEntryPath(name);
+          if (!normalized) throw new ArchiveError("Unsafe RAR entry path", this.archivePath);
+          return normalized.path;
+        },
         password: this.password,
       });
     } catch (err) {
