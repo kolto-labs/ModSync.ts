@@ -55,6 +55,8 @@ jobs:
           corepack pnpm exec playwright install-deps chromium
           sudo apt-get install -y xvfb
       - run: corepack pnpm build
+      - name: Verify complete pinned Electron runtime
+        run: node tools/ensure-electron-runtime.mjs
       - name: "Click native wizard: pinned full.md audit and synthetic source-mapped installs"
         run: xvfb-run -a -s "-screen 0 1600x1000x24" corepack pnpm exec tsx tools/electron-clickthrough.ts --corpus guide-corpus --output artifacts/gui-linux
       - name: Upload source mappings, screenshots, traces, logs and file hashes

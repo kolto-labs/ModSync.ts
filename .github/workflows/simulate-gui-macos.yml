@@ -31,6 +31,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - name: Verify complete pinned Electron runtime
+        run: node tools/ensure-electron-runtime.mjs
       - name: "Click native wizard: pinned full.md audit and synthetic source-mapped installs"
         run: pnpm exec tsx tools/electron-clickthrough.ts --corpus guide-corpus --output artifacts/gui-macos
       - name: Upload source mappings, screenshots, traces, logs and file hashes

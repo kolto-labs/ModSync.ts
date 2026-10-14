@@ -33,7 +33,7 @@ for (const fixture of manifest.games) {
     env: { ...process.env, MODSYNC_SETTINGS_PATH: fixture.settings },
     timeout: 60_000,
   }).catch(async (error) => {
-    await writeFile(join(dir, "launch-error.log"), error.stack ?? String(error));
+    await writeFile(join(dir, "launch-error.log"), [error.stack ?? String(error), ...(Array.isArray(error.log) ? error.log : [])].join("\n"));
     throw error;
   });
   await desktop.context().tracing.start({ screenshots: true, snapshots: true });
