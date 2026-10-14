@@ -24,6 +24,9 @@ export interface BrowseResult {
 
 export interface ArchiveListResult {
   path: string;
+  logicalName?: string;
+  revisionId?: string;
+  sha256?: string;
   entries: Array<{ path: string; size: number; isDirectory: boolean }>;
 }
 

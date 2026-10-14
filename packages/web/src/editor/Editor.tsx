@@ -4,6 +4,9 @@ import { DirectoryBrowser } from "../components/DirectoryBrowser";
 import { Modal } from "../components/Modal";
 import { actions, reportError, setState, toast, useAppState } from "../state/store";
 import type { Guid, InstructionFile, MarkdownStyle, MergeResult, ModComponent } from "../types";
+import { RustInstructionBuilder } from "./RustInstructionBuilder";
+import { BrowseSource } from "./BrowseSource";
+import { AuthoringSessionPanel } from "./AuthoringSessionPanel";
 import { ConfigForm } from "./ConfigForm";
 import { ReorderButtons } from "./fields";
 import { ModForm } from "./ModForm";
@@ -16,6 +19,7 @@ type Dialog =
   | { kind: "merge"; content: string; result?: MergeResult; busy?: boolean }
   | { kind: "guid"; guid: string }
   | { kind: "browse-save" }
+  | { kind: "inspect-source" }
   | null;
 
 export function Editor() {
@@ -29,12 +33,13 @@ export function Editor() {
     return src && !/^https?:/.test(src) && src !== "uploaded content" ? src : `${s.settings?.modDirectory ?? ""}/build.toml`;
   });
   const dirty = s.draft !== s.file;
+  const readOnly = Boolean(file.rustAuthoringGuide);
 
   useEffect(() => {
     if (!s.draft && s.file) actions.setDraft(s.file);
   }, [s.draft, s.file]);
 
-  const update = (next: InstructionFile) => actions.setDraft(next);
+  const update = (next: InstructionFile) => { if (!readOnly) actions.setDraft(next); };
   const updateMod = (m: ModComponent) => update({ ...file, mods: file.mods.map((x) => (x.guid === m.guid ? m : x)) });
   const current = selected === "config" ? undefined : file.mods.find((m) => m.guid === selected);
   const filtered = useMemo(() => {
@@ -105,23 +110,25 @@ export function Editor() {
 
   return (
     <div className="editor">
+      <AuthoringSessionPanel />
       <div className="editor-toolbar">
         <strong>Editor</strong>
+        {readOnly && <button className="btn btn-sm" onClick={() => setDialog({ kind: "inspect-source" })}>Inspect source files…</button>}
         {dirty && <span className="badge badge-warn">unsaved</span>}
         <div className="grow" />
-        <button className="btn btn-sm" onClick={() => { update(blankFile()); setSelected("config"); }}>
+        <button className="btn btn-sm" disabled={readOnly} onClick={() => { actions.setDraft(blankFile()); setSelected("config"); }}>
           New file
         </button>
-        <button className="btn btn-sm btn-primary" onClick={() => setDialog({ kind: "save" })}>
+        <button className="btn btn-sm btn-primary" disabled={readOnly} onClick={() => setDialog({ kind: "save" })}>
           Save
         </button>
-        <button className="btn btn-sm" onClick={() => setDialog({ kind: "export", style: "deadlystream" })}>
+        <button className="btn btn-sm" disabled={readOnly} onClick={() => setDialog({ kind: "export", style: "deadlystream" })}>
           Export markdown
         </button>
-        <button className="btn btn-sm" onClick={() => setDialog({ kind: "import", content: "" })}>
+        <button className="btn btn-sm" disabled={readOnly} onClick={() => setDialog({ kind: "import", content: "" })}>
           Import markdown
         </button>
-        <button className="btn btn-sm" onClick={() => setDialog({ kind: "merge", content: "" })}>
+        <button className="btn btn-sm" disabled={readOnly} onClick={() => setDialog({ kind: "merge", content: "" })}>
           Merge
         </button>
         <button className="btn btn-sm" onClick={() => setDialog({ kind: "guid", guid: newGuid() })}>
@@ -148,7 +155,7 @@ export function Editor() {
                 {m.name || "(unnamed)"}
                 <span className="muted small"> · {m.tier}</span>
               </span>
-              <ReorderButtons
+              <fieldset disabled={readOnly} style={{ border: 0, padding: 0 }}><ReorderButtons
                 index={index}
                 length={file.mods.length}
                 onMove={(to) => update({ ...file, mods: moveItem(file.mods, index, to) })}
@@ -157,14 +164,15 @@ export function Editor() {
                   update({ ...file, mods: file.mods.filter((x) => x.guid !== m.guid) });
                   if (selected === m.guid) setSelected("config");
                 }}
-              />
+              /></fieldset>
             </div>
           ))}
-          <button className="btn btn-sm" onClick={addMod}>
+          <button className="btn btn-sm" disabled={readOnly} onClick={addMod}>
             + Add mod
           </button>
         </aside>
         <div className="editor-form">
+          {readOnly ? <RustInstructionBuilder componentGuid={current?.guid} /> : <>
           {selected === "config" ? (
             <>
               <h2>Build configuration</h2>
@@ -178,9 +186,11 @@ export function Editor() {
           ) : (
             <p className="muted">Select a mod on the left or add one.</p>
           )}
+          </>}
         </div>
       </div>
 
+      {dialog?.kind === "inspect-source" && <BrowseSource inspectOnly onInsert={() => {}} onClose={() => setDialog(null)} />}
       {dialog?.kind === "save" && (
         <Modal
           title="Save instruction file"

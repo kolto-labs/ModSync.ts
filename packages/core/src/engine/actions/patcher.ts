@@ -15,12 +15,18 @@ export const TSLPATCHDATA = "tslpatchdata";
 export async function locateTslpatchdata(
   ctx: InstallContext,
   match: string,
-): Promise<{ tslpatchdataDir: string; executablePath?: string } | undefined> {
+): Promise<{ tslpatchdataDir: string; executablePath?: string; selectedIniName?: string } | undefined> {
   const st = await ctx.fs.stat(match);
   if (!st) return undefined;
   if (!st.isDirectory) {
-    const dir = await findChildCaseInsensitive(ctx.fs, parentPath(st.path), TSLPATCHDATA);
-    return dir ? { tslpatchdataDir: dir, executablePath: st.path } : undefined;
+    const containing = parentPath(st.path);
+    if (baseName(containing).toLowerCase() === TSLPATCHDATA) {
+      const name = baseName(st.path);
+      return { tslpatchdataDir: containing, ...(name.toLowerCase().endsWith(".ini") && name.toLowerCase() !== "namespaces.ini" ? { selectedIniName: name } : {}) };
+    }
+    const dir = await findChildCaseInsensitive(ctx.fs, containing, TSLPATCHDATA);
+    const dataStat = dir ? await ctx.fs.stat(dir) : undefined;
+    return dataStat?.isDirectory ? { tslpatchdataDir: dir!, ...(baseName(st.path).toLowerCase().endsWith(".exe") ? { executablePath: st.path } : {}) } : undefined;
   }
   if (baseName(st.path).toLowerCase() === TSLPATCHDATA) return { tslpatchdataDir: st.path };
   const child = await findChildCaseInsensitive(ctx.fs, st.path, TSLPATCHDATA);
@@ -50,7 +56,7 @@ export async function executePatcher(
     if (matches.length === 0) {
       throw new ActionError("FileNotFoundPre", `patcher source not found: ${instruction.source.map((s) => `"${s}"`).join(", ")}`);
     }
-    let located: { tslpatchdataDir: string; executablePath?: string } | undefined;
+    let located: { tslpatchdataDir: string; executablePath?: string; selectedIniName?: string } | undefined;
     for (const m of matches) {
       located = await locateTslpatchdata(ctx, m);
       if (located) break;
@@ -89,6 +95,8 @@ export async function executePatcher(
         }
         namespaceIndex = idx;
         run.note(`namespace "${namespaces[idx].name}"`);
+      } else if (located.selectedIniName) {
+        iniName = located.selectedIniName;
       }
     }
 

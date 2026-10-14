@@ -47,6 +47,7 @@ interface OverlayNode {
   mtimeMs: number;
   /** In-memory content for files written through the VFS. */
   content?: Uint8Array;
+  readContent?: () => Promise<Uint8Array>;
   /** Base path whose content this node mirrors (copies/moves of base files). */
   source?: string;
   /** Created by addVirtualFiles: reads as empty, size is tracked. */
@@ -110,6 +111,15 @@ export class VirtualFileSystem implements FileSystemPort {
     }
   }
 
+  /** Logical immutable input/member projection; reads lazily, never creates disk files. */
+  async addReadOnlyFile(path: string, size: number, readContent: () => Promise<Uint8Array>): Promise<void> {
+    const norm=normalizePath(path);await this.mkdirp(parentPath(norm));
+    const target=await this.canonicalChildPath(parentPath(norm),baseName(norm));
+    if((await this.lookup(target))?.isDirectory)throw new VfsError("EISDIR",target,"destination is a directory");
+    this.setNode({path:target,isDirectory:false,size,mtimeMs:0,virtual:false,readContent});
+    this.mutations.push({kind:"write",path:target});
+  }
+
   async exists(path: string): Promise<boolean> {
     return (await this.lookup(path)) !== undefined;
   }
@@ -165,6 +175,7 @@ export class VirtualFileSystem implements FileSystemPort {
     if (r.isDirectory) throw new VfsError("EISDIR", r.path, "illegal operation on a directory");
     if (!r.node) return this.base.readFile(r.path);
     if (r.node.content) return r.node.content;
+    if (r.node.readContent) { const bytes=await r.node.readContent();if(bytes.byteLength!==r.node.size)throw new Error("Immutable virtual content size changed");return bytes; }
     if (r.node.source !== undefined) return this.base.readFile(r.node.source);
     return new Uint8Array(0);
   }
@@ -177,6 +188,32 @@ export class VirtualFileSystem implements FileSystemPort {
     if (existing?.isDirectory) throw new VfsError("EISDIR", target, "illegal operation on a directory");
     this.setNode({ path: target, isDirectory: false, size: data.byteLength, mtimeMs: Date.now(), content: data, virtual: false });
     this.mutations.push({ kind: "write", path: target });
+  }
+
+  async inspectDirectoryEntries(path: string): Promise<DirEntry[]> {
+    const entries=new Map<string,DirEntry>(); const basePath=await this.base.resolveCase(path);
+    if(basePath&&!this.isShadowed(fold(basePath))) {
+      if(!this.base.inspectDirectoryEntries)throw new Error("Base cannot preserve case collisions");
+      for(const entry of await this.base.inspectDirectoryEntries(basePath))if(!this.isShadowed(fold(entry.path)))entries.set(entry.name,entry);
+    }
+    for(const node of this.overlay.values())if(fold(parentPath(node.path))===fold(path))entries.set(baseName(node.path),{name:baseName(node.path),path:node.path,isDirectory:node.isDirectory});
+    return [...entries.values()];
+  }
+
+  async inspectPath(path: string): Promise<(FileStat & { isSymbolicLink: boolean }) | undefined> {
+    const r = await this.lookup(path); if (!r) return undefined;
+    if (r.node) return {path:r.path,isDirectory:r.isDirectory,size:r.size,mtimeMs:r.mtimeMs,isSymbolicLink:false};
+    if (!this.base.inspectPath) throw new Error("Base filesystem cannot inspect symlink metadata");
+    return this.base.inspectPath(r.path);
+  }
+
+  async projectDirectory(path: string): Promise<void> {
+    const parent=await this.lookup(parentPath(path));
+    if (!parent?.isDirectory) throw new VfsError("ENOTDIR",path,"directory parent does not exist");
+    const target=joinPath(parent.path,baseName(path)); const existing=await this.lookup(target);
+    if(existing) {if(!existing.isDirectory)throw new VfsError("ENOTDIR",target,"destination is a file");return;}
+    this.setNode({path:target,isDirectory:true,size:0,mtimeMs:Date.now(),virtual:false});
+    this.mutations.push({kind:"mkdir",path:target});
   }
 
   async mkdirp(path: string): Promise<void> {
@@ -256,7 +293,7 @@ export class VirtualFileSystem implements FileSystemPort {
     if (!r) throw new VfsError("ENOENT", normalizePath(path), "no such file or directory");
     if (r.isDirectory) throw new VfsError("EISDIR", r.path, "illegal operation on a directory");
     if (!r.node) return this.base.sha1(r.path);
-    if (r.node.content) return createHash("sha1").update(r.node.content).digest("hex");
+    if (r.node.content || r.node.readContent) return createHash("sha1").update(await this.readFile(r.path)).digest("hex");
     if (r.node.source !== undefined) return this.base.sha1(r.node.source);
     return createHash("sha1").update(new Uint8Array(0)).digest("hex");
   }
@@ -363,6 +400,7 @@ export class VirtualFileSystem implements FileSystemPort {
     };
     if (s.node) {
       if (s.node.content) node.content = s.node.content;
+      else if (s.node.readContent) node.readContent = s.node.readContent;
       else if (s.node.source !== undefined) node.source = s.node.source;
     } else {
       node.source = s.path;

@@ -11,6 +11,7 @@ import type { InstallContext } from "../context.js";
 import { executeChoose, chooseFolderCandidates, isOptionChoose, DEFAULT_CHOOSE_DESTINATION } from "./choose.js";
 import { executeCleanList, planCleanList } from "./cleanList.js";
 import { planTransfer, resolveDestination, resolveSources } from "./common.js";
+import { executeCreateDirectory, directoryDestination } from "./createDirectory.js";
 import { executeCopy } from "./copy.js";
 import { executeDelete } from "./delete.js";
 import { executeDelDuplicate, findDuplicates, normalizeExtension } from "./delDuplicate.js";
@@ -24,6 +25,7 @@ export * from "./common.js";
 export * from "./extract.js";
 export * from "./move.js";
 export * from "./copy.js";
+export * from "./createDirectory.js";
 export * from "./delete.js";
 export * from "./rename.js";
 export * from "./execute.js";
@@ -40,9 +42,12 @@ export type ActionExecutor = (
 ) => Promise<InstructionResult>;
 
 export const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
+  Unset: async (_ctx, instruction, mod, option) => gateResult(instruction, mod, option, "UnknownError", "Choose an action before installing this instruction"),
+  Run: executeExecute,
   Extract: executeExtract,
   Move: executeMove,
   Copy: executeCopy,
+  CreateDirectory: executeCreateDirectory,
   Delete: executeDelete,
   Rename: executeRename,
   Execute: executeExecute,
@@ -117,9 +122,10 @@ export async function executeInstruction(
  * mutating anything. Returns an empty list when the outcome cannot be known
  * up front (Patcher, Execute) or when resolution fails.
  */
-export async function predictTouched(ctx: InstallContext, instruction: Instruction): Promise<string[]> {
+export async function predictTouched(ctx: InstallContext, instruction: Instruction, strict = false): Promise<string[]> {
   try {
     switch (instruction.action) {
+      case "CreateDirectory": return [await directoryDestination(ctx,instruction)];
       case "Move":
       case "Copy": {
         if (!instruction.destination) return [];
@@ -175,7 +181,8 @@ export async function predictTouched(ctx: InstallContext, instruction: Instructi
       default:
         return [];
     }
-  } catch {
+  } catch (error) {
+    if (strict) throw error;
     return [];
   }
 }

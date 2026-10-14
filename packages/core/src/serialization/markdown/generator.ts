@@ -38,6 +38,12 @@ export function describeInstruction(instr: Instruction, mod: ModComponent): stri
   const dest = instr.destination !== undefined ? tick(instr.destination) : undefined;
   let text: string;
   switch (instr.action) {
+    case "Unset":
+      text = "Choose an action for this instruction";
+      break;
+    case "CreateDirectory":
+      text = `Create directory ${dest ?? "(unspecified)"}`;
+      break;
     case "Extract":
       text = `Extract ${srcs}` + (dest ? ` into ${dest}` : "");
       break;
@@ -51,6 +57,7 @@ export function describeInstruction(instr: Instruction, mod: ModComponent): stri
     case "Rename":
       text = `Rename ${srcs} to ${dest ?? "(unspecified)"}`;
       break;
+    case "Run":
     case "Execute":
       text = `Run ${srcs}` + (instr.arguments ? ` with arguments ${tick(instr.arguments)}` : "");
       break;

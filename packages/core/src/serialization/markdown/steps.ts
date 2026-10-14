@@ -173,6 +173,8 @@ function asGuid(s: string): string {
 }
 
 const KEYWORDS: Record<ActionType, string> = {
+  Unset: "UNSET",
+  Run: "RUN",
   Extract: "EXTRACT",
   Move: "MOVE",
   Copy: "COPY",
@@ -183,6 +185,7 @@ const KEYWORDS: Record<ActionType, string> = {
   Choose: "CHOOSE",
   DelDuplicate: "DELDUPLICATE",
   CleanList: "CLEANLIST",
+  CreateDirectory: "CREATEDIRECTORY",
 };
 
 function tick(s: string): string {

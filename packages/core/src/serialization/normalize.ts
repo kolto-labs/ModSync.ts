@@ -156,6 +156,7 @@ const ACTION_ALIASES: Record<string, ActionType> = {
   delduplicate: "DelDuplicate",
   deleteduplicate: "DelDuplicate",
   deldupe: "DelDuplicate",
+  createdirectory: "CreateDirectory",
   cleanlist: "CleanList",
   clean: "CleanList",
 };

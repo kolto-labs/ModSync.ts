@@ -779,6 +779,14 @@ export function createMockClient(events: EventBus): ApiClient {
       }
       return clone(state.file);
     },
+    loadAuthoringSession: async () => { throw new Error("Saved sessions require the production server"); },
+    predictAuthoringIndependent: async () => {throw new Error("Independent prediction requires the real readonly server");},
+    predictAuthoringSession: async () => {throw new Error("Rust prediction backend is not configured");},
+    authoringCapabilities: async () => ({reader:true as const,persistenceBackend:null,predictionBackend:null}),
+    persistAuthoringSession: async () => { throw new Error("Rust persistence backend is unavailable in mock mode"); },
+    authoringArchive: async () => {throw new Error("Saved archive inputs require the local server");},
+    authoringInputs: async () => {throw new Error("Saved input objects require the production backend");},
+    verifyAuthoringInput: async () => {throw new Error("Saved input objects require the production backend");},
     getFile: async () => (state.file ? clone(state.file) : null),
     putFile: async (file) => {
       state.file = clone(file);

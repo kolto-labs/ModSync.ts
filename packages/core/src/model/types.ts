@@ -16,6 +16,8 @@
 export type Guid = string;
 
 export const ACTION_TYPES = [
+  "Unset",
+  "Run",
   "Extract",
   "Move",
   "Copy",
@@ -26,6 +28,7 @@ export const ACTION_TYPES = [
   "Choose",
   "DelDuplicate",
   "CleanList",
+  "CreateDirectory",
 ] as const;
 export type ActionType = (typeof ACTION_TYPES)[number];
 
@@ -89,6 +92,8 @@ export const PLACEHOLDER_KOTOR_DIRECTORY = "<<kotorDirectory>>";
  * camelCase here; the serializer maps them).
  */
 export interface Instruction {
+  /** Unrecognized serialized fields preserved for lossless editing; not execution support. */
+  metadata?: Record<string, unknown>;
   guid: Guid;
   action: ActionType;
   /**
@@ -118,6 +123,8 @@ export interface Instruction {
 
 /** A user-customizable feature nested inside a mod. Defined just like a mod. */
 export interface ModOption {
+  /** Unrecognized serialized fields preserved for lossless editing; not execution support. */
+  metadata?: Record<string, unknown>;
   guid: Guid;
   name: string;
   description?: string;
@@ -134,6 +141,8 @@ export interface ModOption {
 }
 
 export interface ModComponent {
+  /** Unrecognized serialized fields preserved for lossless editing; not execution support. */
+  metadata?: Record<string, unknown>;
   guid: Guid;
   name: string;
   description?: string;
@@ -180,6 +189,8 @@ export interface ModComponent {
 
 /** Top-level instruction file metadata. */
 export interface MainConfig {
+  /** Unrecognized serialized fields preserved for lossless editing; not execution support. */
+  metadata?: Record<string, unknown>;
   /** Display name of the modbuild (e.g. "KOTOR 1 Full Build rev 12"). */
   name?: string;
   targetGame: TargetGame;
@@ -211,6 +222,10 @@ export type PatcherEngine = (typeof PATCHER_ENGINES)[number];
 
 /** A whole instruction file. */
 export interface InstructionFile {
+  /** Authoritative Rust JSON for atomic authoring; mods/config are a display projection. */
+  rustAuthoringGuide?: Record<string, unknown>;
+  /** Unrecognized serialized fields preserved for lossless editing; not execution support. */
+  metadata?: Record<string, unknown>;
   config: MainConfig;
   mods: ModComponent[];
 }
@@ -332,7 +347,12 @@ export interface InstallSummary {
   succeeded: number;
   failed: number;
   skipped: number;
+  /** Explicit virtual result, never counted as physically Installed mods. */
+  virtualPrediction?: import("../authoring/predictionRuntime.js").AuthoringPrediction;
   checkpointSessionId?: string;
+  /** Fatal transaction/setup error; successful counts alone do not imply completed installation. */
+  error?: string;
+  recoveryPending?: boolean;
 }
 
 /** A question the installer asks the user mid-run (Choose action, patcher namespace, execute confirm). */

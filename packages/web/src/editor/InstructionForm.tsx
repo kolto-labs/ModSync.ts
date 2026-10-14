@@ -6,6 +6,8 @@ import { CheckField, Field, GuidPicker, ReorderButtons, SelectField, TextArea, T
 import { blankInstruction, moveItem } from "./util";
 
 const ACTION_HELP: Record<Instruction["action"], string> = {
+  Unset: "Choose an action before installing this instruction.",
+  Run: "Run a program; arguments are passed on the command line.",
   Extract: "Extract archives (sources) into <archive dir>/<archive name>/ or into destination.",
   Move: "Move each source file/folder into the destination folder.",
   Copy: "Copy each source file/folder into the destination folder.",
@@ -15,6 +17,7 @@ const ACTION_HELP: Record<Instruction["action"], string> = {
   Patcher: "Run TSLPatcher/HoloPatcher on the tslpatchdata source; destination = game dir; arguments = namespace index or ini name.",
   Choose: "Ask the user to choose between option GUIDs or folders listed in source.",
   DelDuplicate: "Inside the source folders, delete files with extension `arguments` when a same-named file with another extension exists.",
+  CreateDirectory: "Project an empty folder at destination with empty sources/arguments. Independent TS live execution requires directory rollback ownership and is currently refused.",
   CleanList: "source[0] is a CSV; delete listed files from destination for selected mods.",
 };
 

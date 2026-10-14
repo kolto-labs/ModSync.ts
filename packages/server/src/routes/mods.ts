@@ -17,6 +17,7 @@ export function registerModRoutes(app: FastifyInstance, state: AppState): void {
   app.put<{ Params: { guid: string } }>("/api/mods/:guid/selection", async (req) => {
     const file = state.requireFile();
     if (state.installRunning) throw new HttpError(409, "Cannot change the selection while an installation is running");
+    if (file.rustAuthoringGuide) throw new HttpError(409, "Apply authoring selections through /api/file/edit to preserve reviewed option decisions");
     const body = bodyOf(req.body);
     if (typeof body.selected !== "boolean") throw new HttpError(400, '"selected" must be a boolean');
     let options: Record<string, boolean> | undefined;
@@ -41,6 +42,7 @@ export function registerModRoutes(app: FastifyInstance, state: AppState): void {
   app.post("/api/mods/select-defaults", async (req) => {
     const file = state.requireFile();
     if (state.installRunning) throw new HttpError(409, "Cannot change the selection while an installation is running");
+    if (file.rustAuthoringGuide) throw new HttpError(409, "Apply authoring selections through /api/file/edit to preserve reviewed option decisions");
     const body = bodyOf(req.body);
     const tier = (optionalString(body, "tier") ?? "Recommended") as Tier;
     const changed = selectByTier(file, tiersUpTo(tier));

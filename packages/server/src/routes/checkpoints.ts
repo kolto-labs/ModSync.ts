@@ -1,44 +1,26 @@
 import type { FastifyInstance } from "fastify";
-import { CheckpointError } from "@modsync/core";
+import {CheckpointError} from "@modsync/core";
 import { HttpError, type AppState } from "../state.js";
 
 export function registerCheckpointRoutes(app: FastifyInstance, state: AppState): void {
   app.get("/api/checkpoints", async () => {
     if (!state.settings.kotorDirectory) return [];
-    return state.createCheckpointStore().list();
+    try{return await state.createCheckpointStore().list();}catch(error){if(error instanceof CheckpointError)throw new HttpError(409,error.message);throw error;}
   });
 
-  app.post<{ Params: { session: string; id: string } }>("/api/checkpoints/:session/:id/restore", async (req) => {
-    if (state.installRunning) throw new HttpError(409, "Cannot restore while an installation is running");
-    if (!state.settings.kotorDirectory) throw new HttpError(400, "kotorDirectory is not set");
-    const store = state.createCheckpointStore();
-    let session;
-    try {
-      session = await store.getSession(req.params.session);
-    } catch (err) {
-      throw new HttpError(404, err instanceof Error ? err.message : String(err));
-    }
-    // Restore into the directory the session was recorded for, even if settings moved on.
-    const target = session.kotorDirectory === store.kotorDirectory ? store : state.createCheckpointStore(session.kotorDirectory);
-    let files = 0;
-    try {
-      await target.restore(req.params.session, req.params.id, (done, total) => {
-        files = total;
-        if (done === total || done % 50 === 0) {
-          state.publish({ type: "log", level: "info", message: `restore ${req.params.id}: ${done}/${total} files` });
-        }
-      });
-    } catch (err) {
-      if (err instanceof CheckpointError) throw new HttpError(404, err.message);
-      throw err;
-    }
-    state.logger.info(`restored checkpoint ${req.params.id} of session ${req.params.session} (${files} files)`);
-    return { ok: true, files, sessionId: req.params.session, checkpointId: req.params.id };
+  app.get("/api/checkpoints/capabilities", async () => ({physicalRestore:false,reason:"Independent TypeScript checkpoint restoration is unavailable"}));
+  app.get<{Params:{session:string}}>("/api/checkpoints/:session/recovery",async(req)=>{
+    if(!state.settings.kotorDirectory)throw new HttpError(400,"kotorDirectory is not set");
+    try{return await state.createCheckpointStore().inspectRecovery(req.params.session);}catch(error){if(error instanceof CheckpointError)throw new HttpError(409,error.message);throw error;}
+  });
+  app.post<{ Params: { session: string; id: string } }>("/api/checkpoints/:session/:id/restore", async () => {
+    throw new HttpError(409, "Independent TypeScript physical checkpoint restore is unavailable until paired OS writer ownership and verified quiescence/recovery are implemented");
   });
 
   app.delete<{ Params: { session: string } }>("/api/checkpoints/:session", async (req) => {
+    if (state.installRunning) throw new HttpError(409, "Cannot delete checkpoints while installation is running");
     if (!state.settings.kotorDirectory) throw new HttpError(400, "kotorDirectory is not set");
-    await state.createCheckpointStore().delete(req.params.session);
+    try{await state.createCheckpointStore().delete(req.params.session);}catch(error){if(error instanceof CheckpointError)throw new HttpError(409,error.message);throw error;}
     return { ok: true };
   });
 }

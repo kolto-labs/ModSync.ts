@@ -74,7 +74,7 @@ export function createMainConfig(partial: Partial<MainConfig> = {}): MainConfig 
 }
 
 export function createInstructionFile(partial: Partial<InstructionFile> = {}): InstructionFile {
-  return { config: createMainConfig(partial.config), mods: partial.mods ?? [] };
+  return { ...partial, config: createMainConfig(partial.config), mods: partial.mods ?? [] };
 }
 
 export function createDefaultSettings(partial: Partial<UserSettings> = {}): UserSettings {

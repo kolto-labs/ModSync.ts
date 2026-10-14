@@ -1,3 +1,4 @@
+import type {AuthoringPrediction as IndependentAuthoringPrediction} from "../../../core/src/authoring/predictionRuntime";
 /**
  * Typed API client for the ModSync server (see docs/PLAN.md "Server API").
  *
@@ -79,6 +80,14 @@ export class EventBus {
 
 export type ConnectionState = "disconnected" | "connecting" | "connected";
 
+export interface AuthoringSessionResult {
+  file: InstructionFile;
+  session: { directory: string; head: { format: 1; cursor: number; revisions: { id: string; label: string }[] }; revisionId: string; headSha256: string; revisionSha256: string; readOnly: true };
+}
+
+export type AuthoringPersistRequest = { directory:string; expectedRevision:string } & ({ operation:"edit"; label:string; operations:Record<string,unknown>[] } | { operation:"undo"|"redo" });
+export interface AuthoringPersistResult { backend:"rust-cli"; currentRevision:string; file:InstructionFile; head:AuthoringSessionResult["session"]["head"]; session:AuthoringSessionResult["session"] }
+
 export interface ApiClient {
   readonly events: EventBus;
   readonly isMock: boolean;
@@ -89,9 +98,17 @@ export interface ApiClient {
   updateSettings(patch: Partial<UserSettings>): Promise<UserSettings>;
   fsRoots(): Promise<{ roots: string[] }>;
   fsBrowse(path: string): Promise<BrowseResult>;
+  authoringArchive(directory:string,cursor:number,name:string): Promise<ArchiveListResult>;
   archiveList(path: string): Promise<ArchiveListResult>;
   detectGame(path: string): Promise<GameDetectResult>;
   loadFile(body: { path: string } | { content: string } | { url: string }): Promise<InstructionFile>;
+  loadAuthoringSession(directory: string, cursor?: number): Promise<AuthoringSessionResult>;
+  authoringCapabilities(): Promise<{reader:true; persistenceBackend:"rust-cli"|null;predictionBackend:"rust-cli"|null;independentPredictionBackend?:"typescript-vfs"}>;
+  predictAuthoringSession(request:{directory:string;expectedRevision:string;sourceDirectory:string;gameDirectory:string;component:number;instructions:number}):Promise<{backend:"rust-cli";revisionId:string;entries:{path:string;directory:boolean;content_known:boolean;bytes:number|null}[];events:{component:string;step:number;message:string}[]}>;
+  predictAuthoringIndependent(request:{directory:string;expectedRevision:string;modDirectory:string;kotorDirectory:string;componentGuid:string;instructionCount:number}):Promise<{backend:"typescript-vfs";revisionId:string;prediction:IndependentAuthoringPrediction}>;
+  persistAuthoringSession(request:AuthoringPersistRequest): Promise<AuthoringPersistResult>;
+  authoringInputs(directory:string,cursor:number): Promise<{revisionId:string;inputs:{name:string;bytes:number;sha256:string;verified:false}[]}>;
+  verifyAuthoringInput(directory:string,cursor:number,name:string): Promise<{revisionId:string;name:string;verified:true}>;
   getFile(): Promise<InstructionFile | null>;
   putFile(file: InstructionFile): Promise<InstructionFile>;
   saveFile(path: string): Promise<void>;
@@ -280,6 +297,14 @@ function createHttpClient(): ApiClient {
     archiveList: (path) => get(`/api/archive/list${q({ path })}`),
     detectGame: (path) => get(`/api/game/detect${q({ path })}`),
     loadFile: (body) => post("/api/file/load", body),
+    loadAuthoringSession: (directory, cursor) => post("/api/file/authoring-session", { directory, cursor }),
+    predictAuthoringSession: request => post("/api/file/authoring-predict",request),
+    predictAuthoringIndependent: request => post("/api/file/authoring-predict-independent",request),
+    authoringCapabilities: () => get("/api/file/authoring-capabilities"),
+    persistAuthoringSession: (request) => post("/api/file/authoring-persist", request),
+    authoringArchive: (directory,cursor,name) => post("/api/file/authoring-archive",{directory,cursor,name}),
+    authoringInputs: (directory,cursor) => post("/api/file/authoring-inputs", {directory,cursor}),
+    verifyAuthoringInput: (directory,cursor,verifyName) => post("/api/file/authoring-inputs", {directory,cursor,verifyName}),
     getFile: () => get("/api/file"),
     putFile: (file) => put("/api/file", file),
     saveFile: (path) => post("/api/file/save", { path }),

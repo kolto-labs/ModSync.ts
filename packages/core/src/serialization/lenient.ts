@@ -57,8 +57,8 @@ export class RecordView {
   private readonly byKey = new Map<string, { original: string; value: unknown }>();
   private readonly used = new Set<string>();
 
-  constructor(record: UnknownRecord) {
-    for (const [k, v] of Object.entries(record)) {
+  constructor(private readonly sourceRecord: UnknownRecord) {
+    for (const [k, v] of Object.entries(sourceRecord)) {
       const key = keyOf(k);
       if (!this.byKey.has(key)) this.byKey.set(key, { original: k, value: v });
     }
@@ -115,6 +115,10 @@ export class RecordView {
     return isRecord(v) ? v : undefined;
   }
 
+  unusedRecord(): UnknownRecord {
+    return Object.fromEntries(Object.entries(this.sourceRecord).filter(([key]) => !this.used.has(keyOf(key))));
+  }
+
   unusedKeys(): string[] {
     const out: string[] = [];
     for (const [key, { original }] of this.byKey) if (!this.used.has(key)) out.push(original);
@@ -150,8 +154,10 @@ function enumValue<T extends string>(values: readonly T[], raw: string | undefin
   return values.find((v) => keyOf(v) === key);
 }
 
-function reportUnused(view: RecordView, ctx: LenientContext, label: string): void {
-  for (const key of view.unusedKeys()) ctx.warnings.push(`${label}: unknown key "${key}" dropped`);
+function preserveUnused(view: RecordView, ctx: LenientContext, label: string): UnknownRecord {
+  const metadata = structuredClone(view.unusedRecord());
+  for (const key of Object.keys(metadata)) ctx.warnings.push(`${label}: unknown key "${key}" preserved without execution support`);
+  return metadata;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +196,7 @@ export function instructionFromRecord(rec: UnknownRecord, ctx: LenientContext, l
   if (platform) instr.platform = platform;
   // Legacy keys accepted but ignored on purpose.
   view.get("Patch");
-  reportUnused(view, ctx, label);
+  instr.metadata = preserveUnused(view, ctx, label);
   return instr;
 }
 
@@ -225,7 +231,7 @@ export function optionFromRecord(rec: UnknownRecord, ctx: LenientContext, parent
   if (directions) option.directions = directions;
   const group = view.string("ExclusiveGroup", "Group");
   if (group) option.exclusiveGroup = group;
-  reportUnused(view, ctx, label);
+  option.metadata = preserveUnused(view, ctx, label);
   return option;
 }
 
@@ -304,7 +310,7 @@ export function modFromRecord(rec: UnknownRecord, ctx: LenientContext, index: nu
     }
     ctx.warnings.push(`${label}: legacy installOrder list treated as InstallAfter`);
   }
-  reportUnused(view, ctx, label);
+  mod.metadata = preserveUnused(view, ctx, label);
   return mod;
 }
 
@@ -334,7 +340,7 @@ export function configFromRecord(rec: UnknownRecord | undefined, ctx: LenientCon
   const platform = enumValue(PLATFORMS, view.string("Platform"));
   if (platform) config.platform = platform as Platform;
   config.spoilerFree = view.bool(false, "SpoilerFree");
-  reportUnused(view, ctx, "[Config]");
+  config.metadata = preserveUnused(view, ctx, "[Config]");
   return config;
 }
 
@@ -342,12 +348,22 @@ export function configFromRecord(rec: UnknownRecord | undefined, ctx: LenientCon
 // model -> record (PascalCase, braced upper GUIDs)
 // ---------------------------------------------------------------------------
 
+/** Metadata may round-trip, but must not override recognized parser fields. */
+function extensionRecord(metadata: UnknownRecord | undefined, known: string[]): UnknownRecord {
+  const keys = new Set(known.map(keyOf));
+  for (const key of Object.keys(metadata ?? {})) {
+    if (keys.has(keyOf(key))) throw new Error(`Extension metadata shadows serialized field ${key}`);
+  }
+  return structuredClone(metadata ?? {});
+}
+
 function braced(guid: string): string {
   return isGuid(guid) ? toBracedGuid(guid) : guid;
 }
 
 export function instructionToRecord(instr: Instruction): UnknownRecord {
   const rec: UnknownRecord = {
+    ...extensionRecord(instr.metadata, ["Guid", "Id", "Action", "Type", "ActionType", "Description", "Desc", "Overwrite", "Source", "Sources", "Paths", "Path", "From", "Destination", "Dest", "To", "Target", "Arguments", "Args", "Argument", "Dependencies", "Dependency", "Requires", "Restrictions", "Restricted", "Restriction", "Conflicts", "Platform", "Patch"]),
     Guid: braced(instr.guid),
     Action: instr.action,
   };
@@ -364,6 +380,7 @@ export function instructionToRecord(instr: Instruction): UnknownRecord {
 
 export function optionToRecord(option: ModOption): UnknownRecord {
   const rec: UnknownRecord = {
+    ...extensionRecord(option.metadata, ["Guid", "Id", "Name", "Description", "Directions", "Dependencies", "Dependency", "Restrictions", "Restricted", "Restriction", "InstallAfter", "InstallBefore", "IsSelected", "Selected", "ExclusiveGroup", "Group", "Instructions", "Instruction"]),
     Guid: braced(option.guid),
     Name: option.name,
   };
@@ -381,6 +398,7 @@ export function optionToRecord(option: ModOption): UnknownRecord {
 
 export function modToRecord(mod: ModComponent): UnknownRecord {
   const rec: UnknownRecord = {
+    ...extensionRecord(mod.metadata, ["Guid", "Id", "Name", "Description", "Directions", "Authors", "Author", "Tier", "Category", "Categories", "Language", "NonEnglishFunctionality", "InstallationMethod", "InstallMethod", "Method", "ModLink", "ModLinks", "Link", "Links", "Url", "ExpectedFiles", "ExpectedFile", "ExpectedHashes", "Hashes", "Images", "Image", "UsageWarnings", "Warnings", "Warning", "Dependencies", "Dependency", "Masters", "Restrictions", "Restricted", "Restriction", "Incompatible", "InstallAfter", "InstallBefore", "UntestedWith", "Untested", "IsSelected", "Selected", "IsDownloaded", "InstallState", "FullBuildOnly", "IsWidescreen", "Widescreen", "AspyrOnly", "IsPatch", "Patch", "HeadingLevel", "InstallOrder", "Instructions", "Instruction", "Options", "Option"]),
     Guid: braced(mod.guid),
     Name: mod.name,
   };
@@ -414,7 +432,7 @@ export function modToRecord(mod: ModComponent): UnknownRecord {
 }
 
 export function configToRecord(config: MainConfig): UnknownRecord {
-  const rec: UnknownRecord = { TargetGame: config.targetGame };
+  const rec: UnknownRecord = { ...extensionRecord(config.metadata, ["TargetGame", "Game", "Name", "Title", "Version", "Author", "Description", "SourceUrl", "Source", "CompatibilityLevel", "PatcherEngine", "Patcher", "SpoilerFree", "Platform", "BeforeModListContent", "BeforeModList", "AspyrSectionContent", "AspyrSection", "WidescreenSectionContent", "WidescreenSection", "AfterModListContent", "AfterModList"]), TargetGame: config.targetGame };
   if (config.name) rec.Name = config.name;
   if (config.version) rec.Version = config.version;
   if (config.author) rec.Author = config.author;

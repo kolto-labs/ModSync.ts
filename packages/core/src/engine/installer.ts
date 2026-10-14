@@ -6,9 +6,12 @@
  */
 
 import { EventEmitter } from "node:events";
+import { predictRustAuthoringGuide } from "../authoring/predictionRuntime.js";
 
 import type { openArchive } from "../archive/index.js";
 import type { CheckpointStore } from "../checkpoints/store.js";
+import { RealFileSystem } from "../fs/realFileSystem.js";
+import { VirtualFileSystem } from "../fs/virtualFileSystem.js";
 import { NullLogger } from "../logging/logger.js";
 import type {
   CheckpointSession,
@@ -36,7 +39,7 @@ import type { PatcherPort } from "./patcherPort.js";
 import { checkSelectionConstraints, computeSelection, type SelectionSet } from "./selection.js";
 
 /** The three CheckpointStore methods the installer relies on. */
-export type CheckpointSink = Pick<CheckpointStore, "startSession" | "beforeTouch" | "create">;
+export type CheckpointSink = Pick<CheckpointStore, "startSession" | "beforeTouch" | "create" | "beginMutation" | "completeMutation">;
 
 export interface InstallerDeps {
   fs?: FileSystemPort;
@@ -54,6 +57,8 @@ export interface RunOptions {
   modGuids?: Guid[];
   /** Simulate instead of touching the disk. */
   dryRun?: boolean;
+  /** Immutable saved inputs and optional authored instruction boundary for canonical raw-guide prediction. */
+  authoringPrediction?: { sessionDirectory?: string; componentGuid?: Guid; instructionCount?: number };
 }
 
 export type InstallEventListener = (event: InstallEvent) => void;
@@ -68,6 +73,7 @@ export class Installer extends EventEmitter {
   private controller: AbortController | undefined;
   private pending: PendingPrompt | undefined;
   private active = false;
+  private recoveryPending = false;
   private currentModGuid: Guid | undefined;
   private lastSummary: InstallSummary | undefined;
 
@@ -141,6 +147,7 @@ export class Installer extends EventEmitter {
   plan(opts: RunOptions = {}): { selection: SelectionSet; order: Guid[]; mods: ModComponent[]; issues: ReturnType<typeof checkSelectionConstraints> } {
     const selection = computeSelection(this.file, this.settings);
     const issues = checkSelectionConstraints(this.file, selection, this.settings.compatibilityLevel);
+    if (this.file.rustAuthoringGuide) issues.push({ severity: "error", code: "authoring-install-unported", message: "Rust authoring installation execution is not yet ported; edit and save the guide before choosing an installation workflow" });
     const orderResult = computeInstallOrder(this.file, selection);
     issues.push(...orderResult.issues);
     const phase = opts.phase ?? "base";
@@ -155,6 +162,7 @@ export class Installer extends EventEmitter {
 
   async run(opts: RunOptions = {}): Promise<InstallSummary> {
     if (this.active) throw new Error("an installation is already running");
+    this.recoveryPending = false;
     this.active = true;
     const controller = new AbortController();
     this.controller = controller;
@@ -164,19 +172,41 @@ export class Installer extends EventEmitter {
     this.lastSummary = summary;
 
     try {
+      if (this.file.rustAuthoringGuide) {
+        if (!opts.dryRun) throw new Error("Independent TypeScript physical installation is unavailable: exclusive OS writer ownership and verified recovery acknowledgement are not implemented.");
+        if (opts.phase === "widescreen" || opts.modGuids !== undefined) throw new Error("Canonical authored prediction does not support legacy phase/mod filters; use an explicit authored component boundary.");
+        if (this.deps.fs || this.deps.patcher || this.deps.openArchive) throw new Error("Canonical authored prediction uses its reviewed readonly filesystem/archive backend; injected legacy execution backends are unsupported.");
+        const prediction = await predictRustAuthoringGuide(this.file.rustAuthoringGuide, {
+          ...opts.authoringPrediction, settings: this.settings, signal: controller.signal,
+        });
+        summary.virtualPrediction = prediction;
+        for (const result of prediction.results) this.emitEvent({ type: "instruction-finished", result });
+        if (prediction.error || prediction.unmodeledEffects.length) {
+          summary.error = prediction.error ?? "Virtual prediction has unmodeled external-program or patcher effects; it does not prove installation success.";
+          this.emitEvent({ type: "install-error", message: summary.error });
+        }
+        summary.finishedAt = new Date().toISOString();
+        if (controller.signal.aborted) this.emitEvent({ type: "install-cancelled" });
+        this.emitEvent({ type: "install-finished", summary });
+        return summary;
+      }
+      if (opts.authoringPrediction) throw new Error("Authored prediction options require a canonical raw guide");
       const { selection, mods, issues } = this.plan(opts);
       const errors = issues.filter((i) => i.severity === "error");
       if (errors.length) {
-        this.emitEvent({ type: "install-error", message: errors.map((e) => e.message).join("\n") });
+        summary.error = errors.map((e) => e.message).join("\n");
+        this.emitEvent({ type: "install-error", message: summary.error });
         summary.finishedAt = new Date().toISOString();
         return summary;
       }
       for (const w of issues) this.emitEvent({ type: "log", level: "warn", message: w.message });
 
+      const baseFs = this.deps.fs ?? new RealFileSystem();
+      const executionFs = opts.dryRun && !baseFs.isVirtual ? new VirtualFileSystem(baseFs) : baseFs;
       const ctx: InstallContext = createInstallContext({
         settings: this.settings,
         selection,
-        fs: this.deps.fs,
+        fs: executionFs,
         logger,
         patcher: this.deps.patcher,
         telemetry: this.deps.telemetry,
@@ -194,6 +224,10 @@ export class Installer extends EventEmitter {
           }),
       });
 
+      if (!ctx.dryRun || !ctx.fs.isVirtual) {
+        throw new Error("Independent TypeScript physical installation is unavailable: exclusive OS writer ownership and verified recovery acknowledgement are not implemented. Use a virtual filesystem for prediction or the configured authoritative Rust workflow.");
+      }
+
       let session: CheckpointSession | undefined;
       const store = this.deps.checkpoints;
       if (store && !ctx.dryRun) {
@@ -202,8 +236,7 @@ export class Installer extends EventEmitter {
           summary.checkpointSessionId = session.id;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          logger.warn(`checkpoints disabled: ${message}`);
-          this.emitEvent({ type: "log", level: "warn", message: `checkpoints disabled: ${message}` });
+          throw new Error(`Checkpoint setup failed before installation: ${message}`);
         }
       }
 
@@ -276,6 +309,14 @@ export class Installer extends EventEmitter {
         mod.installState = modResult.state;
         summary.mods.push(modResult);
         this.emitEvent({ type: "mod-finished", result: modResult });
+        if (failed) {
+          // The virtual tree may already contain partial effects. Rust stops at
+          // the failed component; later mods must not consume that partial state.
+          const failure = modResult.instructionResults.find((result) => !isSoftResult(result));
+          summary.error = `Installation stopped at "${mod.name}": ${failure?.message ?? failure?.code ?? "instruction failed"}`;
+          this.emitEvent({ type: "install-error", message: summary.error });
+          break;
+        }
       }
 
       summary.finishedAt = new Date().toISOString();
@@ -284,6 +325,8 @@ export class Installer extends EventEmitter {
       return summary;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      summary.error = message;
+      summary.recoveryPending = this.recoveryPending;
       logger.error(`install failed: ${message}`);
       summary.finishedAt = new Date().toISOString();
       this.emitEvent({ type: "install-error", message });
@@ -319,27 +362,37 @@ export class Installer extends EventEmitter {
       action: instruction.action,
       description: instruction.description ?? describeBriefly(instruction),
     });
+    let predicted: string[] = [];
+    let checkpointOperationId:string|undefined;
     if (store && session) {
-      const predicted = await predictTouched(ctx, instruction);
+      predicted = await predictTouched(ctx, instruction, true);
       try {
         await store.beforeTouch(session, predicted);
       } catch (err) {
-        ctx.logger.warn(`checkpoint beforeTouch failed: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`Checkpoint baseline failed before mutation: ${err instanceof Error ? err.message : String(err)}`);
       }
+      this.recoveryPending = true;
+      checkpointOperationId=await store.beginMutation(session, instruction.guid, predicted);
     }
     const result = await executeInstruction(ctx, instruction, mod, option);
-    if (store && session && result.code !== "UserCancelled") {
+    if (store && session && !isSoftResult(result)) {
+      throw new Error(`Instruction ${instruction.guid} failed (${result.code}); installation stopped with recovery pending: ${result.message ?? "partial mutation cannot be excluded"}`);
+    }
+    if (store && session) {
       try {
         const meta = await store.create(session, {
           label: `${mod.name}: ${instruction.action}`,
           modGuid: mod.guid,
           instructionGuid: instruction.guid,
-          touched: result.touched,
+          touched: [...new Set([...predicted,...result.touched])],
         });
         result.checkpointId = meta.id;
+        if(!checkpointOperationId)throw new Error("Checkpoint operation identity is unavailable");
+        await store.completeMutation(session,instruction.guid,checkpointOperationId);
+        this.recoveryPending = false;
         this.emitEvent({ type: "checkpoint-created", checkpointId: meta.id, isAnchor: meta.isAnchor, index: meta.index });
       } catch (err) {
-        ctx.logger.warn(`checkpoint failed: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`Checkpoint finalization failed; pending instruction ${instruction.guid} retained in session ${session.id}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
     ctx.telemetry?.record({

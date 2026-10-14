@@ -26,6 +26,12 @@ export interface DirEntry {
 }
 
 export interface FileSystemPort {
+  /** Non-following metadata required for directory authoring safety; omitted ports fail closed. */
+  /** Preserve case-collision entries for strict directory authoring checks. */
+  inspectDirectoryEntries?(path: string): Promise<DirEntry[]>;
+  inspectPath?(path: string): Promise<(FileStat & { isSymbolicLink: boolean }) | undefined>;
+  /** Single-leaf virtual projection only. Real execution needs durable directory ownership. */
+  projectDirectory?(path: string): Promise<void>;
   /** True if a file or directory exists at the path (case-insensitive lookup allowed). */
   exists(path: string): Promise<boolean>;
   stat(path: string): Promise<FileStat | undefined>;

@@ -32,6 +32,13 @@ function isMissing(err: unknown): boolean {
 export class RealFileSystem implements FileSystemPort {
   readonly isVirtual = false;
 
+  inspectDirectoryEntries(path: string): Promise<DirEntry[]> { return this.readDir(path); }
+
+  async inspectPath(path: string): Promise<(FileStat & { isSymbolicLink: boolean }) | undefined> {
+    try { const st = await fsp.lstat(normalizePath(path)); return { path: normalizePath(path), isDirectory: st.isDirectory(), isSymbolicLink: st.isSymbolicLink(), size: st.size, mtimeMs: st.mtimeMs }; }
+    catch (err) { if (isMissing(err)) return undefined; throw err; }
+  }
+
   async exists(path: string): Promise<boolean> {
     return (await this.resolveExisting(path)) !== undefined;
   }

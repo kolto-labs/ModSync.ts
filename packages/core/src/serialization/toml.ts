@@ -22,7 +22,7 @@ import {
 
 export interface ParsedInstructionFile {
   file: InstructionFile;
-  /** Non-fatal problems: dropped unknown keys, generated GUIDs, legacy keys, ... */
+  /** Non-fatal problems: preserved unknown keys, generated GUIDs, legacy keys, ... */
   warnings: string[];
 }
 
@@ -65,8 +65,12 @@ export function parseInstructionFileDetailed(text: string): ParsedInstructionFil
     ctx.warnings.push("no [[thisMod]] / [[modList]] tables found; file has no mods");
   }
 
+  const metadata: UnknownRecord = {};
   for (const key of Object.keys(root)) {
-    if (key !== configKey && key !== modKey) ctx.warnings.push(`top-level: unknown key "${key}" dropped`);
+    if (key !== configKey && key !== modKey) {
+      Object.defineProperty(metadata, key, { value: structuredClone(root[key]), enumerable: true, writable: true, configurable: true });
+      ctx.warnings.push(`top-level: unknown key "${key}" preserved without execution support`);
+    }
   }
 
   let mods: ModComponent[] = rawMods.map((rec, i) => modFromRecord(rec, ctx, i));
@@ -92,7 +96,7 @@ export function parseInstructionFileDetailed(text: string): ParsedInstructionFil
     seen.add(mod.guid);
   }
 
-  return { file: { config, mods }, warnings: finishLenient(ctx) };
+  return { file: { config, mods, metadata }, warnings: finishLenient(ctx) };
 }
 
 /** Parse an instruction file. Throws on hard errors; warnings are discarded. */
@@ -102,7 +106,13 @@ export function parseInstructionFile(text: string): InstructionFile {
 
 /** Serialize in the C# KOTORModSync style. */
 export function serializeInstructionFile(file: InstructionFile): string {
+  for (const key of Object.keys(file.metadata ?? {})) {
+    if ([...MOD_ARRAY_KEYS, ...CONFIG_KEYS].includes(key.toLowerCase())) {
+      throw new Error(`Extension metadata shadows instruction file field ${key}`);
+    }
+  }
   const doc: UnknownRecord = {
+    ...structuredClone(file.metadata ?? {}),
     Config: configToRecord(file.config),
     thisMod: file.mods.map(modToRecord),
   };

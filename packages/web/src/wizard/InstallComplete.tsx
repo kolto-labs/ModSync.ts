@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { formatBytes } from "../components/DownloadsDrawer";
 import { actions, modName, useAppState } from "../state/store";
 import type { InstallSummary } from "../types";
@@ -6,19 +6,45 @@ import type { InstallSummary } from "../types";
 export function InstallCompletePanel({ phase }: { phase: "base" | "widescreen" }) {
   const s = useAppState();
   const summary: InstallSummary | undefined = phase === "base" ? s.install.baseSummary ?? s.install.summary : s.install.widescreenSummary ?? s.install.summary;
-  const [restoring, setRestoring] = useState<string | null>(null);
 
   useEffect(() => {
-    void actions.refreshCheckpoints();
-  }, []);
+    if (!summary?.virtualPrediction) void actions.refreshCheckpoints();
+  }, [summary?.virtualPrediction]);
 
   const duration = summary ? Math.max(0, new Date(summary.finishedAt).getTime() - new Date(summary.startedAt).getTime()) : 0;
   const sessions = summary?.checkpointSessionId ? s.checkpoints.filter((c) => c.id === summary.checkpointSessionId) : s.checkpoints.slice(0, 1);
   const touched = summary?.mods.reduce((n, m) => n + m.instructionResults.reduce((k, r) => k + r.touched.length, 0), 0) ?? 0;
 
+  if (summary?.virtualPrediction) {
+    const prediction = summary.virtualPrediction;
+    return (
+      <section className="page page-narrow">
+        <h1>{summary.error ? "Virtual prediction stopped" : "Virtual prediction complete"}</h1>
+        <p>Instructions ran against a virtual filesystem. No game files were installed or changed.</p>
+        {summary.error && <div className="alert alert-error" role="alert">{summary.error}</div>}
+        <p>{prediction.results.length} instruction results · {prediction.mutations.length} virtual changes · {(duration / 1000).toFixed(1)}s</p>
+        <div className="card">
+          <h2>Predicted instructions</h2>
+          <table className="table">
+            <thead><tr><th>Mod</th><th>Action</th><th>Result</th><th>Paths</th></tr></thead>
+            <tbody>{prediction.results.map((result, index) => (
+              <tr key={`${result.modGuid}:${result.instructionGuid}:${index}`}>
+                <td>{modName(s, result.modGuid)}</td><td>{result.action}</td>
+                <td>{result.code}{result.message && <div className="muted small">{result.message}</div>}</td>
+                <td>{result.touched.length}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        {prediction.verifiedInputs.length > 0 && <div className="card"><h2>Verified archive inputs</h2><ul>{prediction.verifiedInputs.map(name => <li key={name}>{name}</li>)}</ul></div>}
+      </section>
+    );
+  }
+
   return (
     <section className="page page-narrow">
-      <h1>{phase === "base" ? "Base install complete" : "Widescreen install complete"}</h1>
+      <h1>{summary?.error ? "Installation stopped" : phase === "base" ? "Base install complete" : "Widescreen install complete"}</h1>
+      {summary?.error && <div className="alert alert-error" role="alert">{summary.error}{summary.recoveryPending && <p>Checkpoint recovery is pending. Inspect the saved session before continuing installation.</p>}</div>}
       {!summary && <div className="alert alert-warn">No install summary is available{s.install.cancelled ? " because the install was cancelled" : ""}.</div>}
       {summary && (
         <>
@@ -83,6 +109,7 @@ export function InstallCompletePanel({ phase }: { phase: "base" | "widescreen" }
             Refresh
           </button>
         </div>
+        <p className="muted small">Checkpoint restore is unavailable in this TypeScript implementation.</p>
         {sessions.length === 0 && <p className="muted">No checkpoints were recorded.</p>}
         {sessions.map((session) => (
           <div key={session.id}>
@@ -110,18 +137,7 @@ export function InstallCompletePanel({ phase }: { phase: "base" | "widescreen" }
                     <td>{c.changedCount}</td>
                     <td>{formatBytes(c.storedBytes)}</td>
                     <td>
-                      <button
-                        className="btn btn-sm"
-                        disabled={restoring !== null}
-                        onClick={async () => {
-                          if (!window.confirm(`Restore the game folder to checkpoint ${c.index} (${c.label})? Every later change is undone.`)) return;
-                          setRestoring(c.id);
-                          await actions.restoreCheckpoint(session.id, c.id);
-                          setRestoring(null);
-                        }}
-                      >
-                        {restoring === c.id ? "Restoring…" : "Restore"}
-                      </button>
+                      <span className="muted small">Restore unavailable</span>
                     </td>
                   </tr>
                 ))}

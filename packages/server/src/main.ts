@@ -22,6 +22,9 @@ export interface ServerCliOptions {
   open: boolean;
   staticDir?: string;
   settingsPath?: string;
+  rustAuthoringExecutable?: string;
+  exportDirectories?: string[];
+  protectedDirectories?: string[];
   help: boolean;
 }
 
@@ -38,6 +41,9 @@ Options:
   --open             Open the UI in the default browser
   --static <dir>     Web bundle directory (default: packages/web/dist)
   --settings <path>  Settings file (default: platform config dir)
+  --export-dir <path>     Allow new exports in this existing folder (repeatable)
+  --protect-dir <path>    Exclude an active game/install root (repeatable)
+  --authoring-rust <path>  Opt in to Rust CLI locked session persistence
   -h, --help         Show this help
 `;
 
@@ -79,6 +85,15 @@ export function parseServerArgs(argv: string[]): ServerCliOptions {
         break;
       case "--static":
         out.staticDir = value();
+        break;
+      case "--export-dir":
+        (out.exportDirectories ??= []).push(resolvePath(value()));
+        break;
+      case "--protect-dir":
+        (out.protectedDirectories ??= []).push(resolvePath(value()));
+        break;
+      case "--authoring-rust":
+        out.rustAuthoringExecutable = resolvePath(value());
         break;
       case "--settings":
         out.settingsPath = value();
@@ -144,7 +159,7 @@ export async function runServerMain(argv: string[] = process.argv.slice(2), log:
   }
   const token = opts.noToken ? undefined : (opts.token ?? randomBytes(24).toString("hex"));
   const staticDir = opts.staticDir ? resolvePath(opts.staticDir) : defaultStaticDir();
-  const server = await createModSyncServer({ token, staticDir, settingsPath: opts.settingsPath });
+  const server = await createModSyncServer({ token, staticDir, settingsPath: opts.settingsPath, rustAuthoringExecutable: opts.rustAuthoringExecutable, exportDirectories: opts.exportDirectories, protectedDirectories: opts.protectedDirectories });
   const base = await server.listen(opts.port, opts.host);
   const url = token ? `${base}/?token=${encodeURIComponent(token)}` : `${base}/`;
   log(`ModSync server listening on ${base}`);

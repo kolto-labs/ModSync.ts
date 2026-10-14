@@ -1,3 +1,4 @@
+import type { AuthoringSessionResult, AuthoringPersistRequest } from "../api/client";
 /**
  * A tiny external store consumed through `useSyncExternalStore`.
  * All server-synchronised state lives here; components call the `actions`
@@ -73,6 +74,9 @@ export interface AppState {
   /** Editor working copy (separate from the installer's file until saved). */
   draft: InstructionFile | null;
   fileSource?: string;
+  authoringSession: AuthoringSessionResult["session"] | null;
+  authoringBackend: "rust-cli" | null;
+  authoringBusy: boolean;
   selection: SelectionResult | null;
   report: ValidationReport | null;
   validating: boolean;
@@ -128,6 +132,9 @@ let state: AppState = {
   settings: null,
   file: null,
   draft: null,
+  authoringSession: null,
+  authoringBackend: null,
+  authoringBusy: false,
   selection: null,
   report: null,
   validating: false,
@@ -318,7 +325,7 @@ export const actions = {
     try {
       const file = await api.loadFile(body);
       const source = "path" in body ? body.path : "url" in body ? body.url : "uploaded content";
-      setState({ file, draft: file, fileSource: source, report: null, install: emptyInstall() });
+      setState({ file, draft: file, fileSource: source, authoringSession:null, report: null, install: emptyInstall() });
       await actions.refreshSelection();
       toast("success", `Loaded ${file.config.name ?? "instruction file"} (${file.mods.length} mods)`);
       return true;
@@ -326,6 +333,30 @@ export const actions = {
       reportError(err, "Loading the instruction file failed");
       return false;
     }
+  },
+
+  async loadAuthoringSession(directory:string,cursor?:number):Promise<boolean> {
+    if(state.authoringBusy)return false;
+    setState({authoringBusy:true});
+    try {
+      const result=await api.loadAuthoringSession(directory,cursor);
+      const capability=await api.authoringCapabilities().catch(()=>({reader:true as const,persistenceBackend:null}));
+      setState({file:result.file,draft:result.file,authoringSession:result.session,authoringBackend:capability.persistenceBackend,fileSource:`Saved session: ${result.session.directory}`,report:null,selection:null,install:emptyInstall()});
+      return true;
+    }catch(error){reportError(error,"Opening the saved revision failed");return false;}
+    finally{setState({authoringBusy:false});}
+  },
+  async persistAuthoringSession(command: {operation:"edit";label:string;operations:Record<string,unknown>[]} | {operation:"undo"|"redo"}):Promise<boolean> {
+    const session=state.authoringSession;
+    if(state.authoringBusy||!session||state.authoringBackend!=="rust-cli")return false;
+    setState({authoringBusy:true});
+    try {
+      const request:AuthoringPersistRequest={...command,directory:session.directory,expectedRevision:session.revisionId};
+      const result=await api.persistAuthoringSession(request);
+      setState({file:result.file,draft:result.file,authoringSession:result.session,report:null,selection:null});
+      return true;
+    }catch(error){reportError(error,"Saving the session failed; reload before retrying");setState({authoringBackend:null});return false;}
+    finally{setState({authoringBusy:false});}
   },
 
   async refreshFile(): Promise<void> {

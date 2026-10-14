@@ -22,6 +22,12 @@ export interface ModSyncServerOptions {
   staticDir?: string;
   /** Settings file; default `defaultSettingsPath()` from core. */
   settingsPath?: string;
+  /** Explicit opt-in Rust CLI persistence backend; requires expected-revision/stdin contract. */
+  rustAuthoringExecutable?: string;
+  /** Existing directories explicitly permitted for new standalone exports. */
+  exportDirectories?: string[];
+  /** Additional active install/game roots excluded from exports. */
+  protectedDirectories?: string[];
   electronBridge?: ElectronBridge;
   /** Fastify logger; default off. */
   logger?: boolean;

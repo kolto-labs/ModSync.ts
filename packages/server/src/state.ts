@@ -113,6 +113,7 @@ export class AppState {
   file: InstructionFile | null = null;
   filePath: string | null = null;
   fileWarnings: string[] = [];
+  readonly authoringDirectories = new Set<string>();
 
   installer: Installer | null = null;
   installRunning = false;

@@ -74,6 +74,9 @@ export async function createModSyncServer(opts: ModSyncServerOptions = {}): Prom
     ignoreTrailingSlash: true,
   });
   app.decorate("modsyncState", state);
+  app.decorate("rustAuthoringExecutable", opts.rustAuthoringExecutable ?? null);
+  app.decorate("exportDirectories", opts.exportDirectories ?? []);
+  app.decorate("protectedDirectories", opts.protectedDirectories ?? []);
 
   await app.register(cors, {
     origin: (origin, cb) => cb(null, isLocalOrigin(origin)),
