@@ -1,0 +1,5 @@
+{
+  "expected": "/tmp/modsync-isolated-profiles-gui/KOTOR2-fullmd-derived/electron-profile",
+  "actual": "/tmp/modsync-isolated-profiles-gui/KOTOR2-fullmd-derived/electron-profile",
+  "isolated": true
+}

@@ -1,0 +1,22 @@
+{
+  "linuxCLI": {
+    "id": 38509235033,
+    "conclusion": "success",
+    "runner": "ephemeral self-hosted GitHub Actions"
+  },
+  "linuxGUIAttempts": [
+    {
+      "id": 38512949425,
+      "conclusion": "failure",
+      "reason": "Intermittent HTTP shutdown stall; fixed and verified locally"
+    },
+    {
+      "id": 38514279475,
+      "conclusion": "failure",
+      "reason": "Concurrent native launches shared a singleton profile; profile isolation subsequently verified locally"
+    }
+  ],
+  "linuxGUIFinalLocal": "gui-results-local.json",
+  "retryBlock": "Runner registration API returns403 Resource not accessible by integration; GH CLI device refresh requested",
+  "hostedPlatformsBlock": "GitHub refused runner allocation because recent payments failed or spending limit must increase"
+}

@@ -73,3 +73,17 @@ Hosted jobs were dispatched for all platforms, but GitHub rejected allocation
 because account payments failed or the spending limit needs increasing. Windows
 and macOS execution remains unverified until hosted runners can start. The
 workflows and upload steps remain ready for those platforms.
+
+The final local native Electron proof passed all four lanes with isolated
+profiles and normal code-0 shutdowns. Concurrent instance verification confirmed
+that separate proof sessions do not collide with the desktop singleton lock.
+The final aggregate check passed 413 tests in 47 files, build, type checking and
+lint. Local GUI receipts and screenshots are retained in the evidence directory.
+
+The latest GitHub GUI retry failed at launch because a concurrent local native
+proof shared its default Electron profile. Per-lane profile isolation subsequently
+passed concurrent and four-lane local proofs. A further Actions retry could not
+register its ephemeral runner: GitHub returned HTTP 403, “Resource not accessible
+by integration”. GH CLI device authentication refresh was requested; this is
+separate from the hosted billing block. The final rebuilt Linux desktop package
+also passed authenticated API health and normal shutdown checks.

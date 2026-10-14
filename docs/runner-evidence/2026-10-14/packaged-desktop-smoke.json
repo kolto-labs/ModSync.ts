@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "elapsedMs": 60,
+  "exitCode": 0,
+  "signal": null,
+  "forced": false,
+  "healthStatus": 200,
+  "platform": "linux",
+  "sourceCommit": "71708b4",
+  "packagingCommand": "corepack pnpm --filter @modsync/electron package",
+  "electronVersion": "33.4.11"
+}

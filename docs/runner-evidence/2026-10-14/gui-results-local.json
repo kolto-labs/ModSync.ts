@@ -1,0 +1,42 @@
+{
+  "runtime": "native-electron",
+  "platform": "linux",
+  "results": [
+    {
+      "game": "KOTOR1",
+      "lane": "synthetic-features",
+      "originalSourceInstalled": false,
+      "omittedPatcherAndExecutableEffects": true,
+      "status": "passed",
+      "succeeded": 3,
+      "checkpointSessionId": "20261014-050315105-fb3324"
+    },
+    {
+      "game": "KOTOR2",
+      "lane": "synthetic-features",
+      "originalSourceInstalled": false,
+      "omittedPatcherAndExecutableEffects": true,
+      "status": "passed",
+      "succeeded": 3,
+      "checkpointSessionId": "20261014-050318588-379343"
+    },
+    {
+      "game": "KOTOR1",
+      "lane": "fullmd-derived-mechanical",
+      "originalSourceInstalled": false,
+      "omittedPatcherAndExecutableEffects": true,
+      "status": "passed",
+      "succeeded": 197,
+      "checkpointSessionId": "20261014-050325071-806a3a"
+    },
+    {
+      "game": "KOTOR2",
+      "lane": "fullmd-derived-mechanical",
+      "originalSourceInstalled": false,
+      "omittedPatcherAndExecutableEffects": true,
+      "status": "passed",
+      "succeeded": 154,
+      "checkpointSessionId": "20261014-050340638-007a04"
+    }
+  ]
+}
