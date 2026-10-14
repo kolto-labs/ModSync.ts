@@ -56,9 +56,15 @@ jobs:
       - name: Audit guides and run controlled CLI fixtures
         run: corepack pnpm exec tsx tools/synthetic-modbuild.ts --corpus corpus --output artifacts/synthetic-cli --game "${{ inputs.game }}"
       - name: Upload audit, CLI logs, output proofs and checkpoints
-        if: always()
+        if: always() && inputs.runner != 'session'
         uses: actions/upload-artifact@v4
         with:
           name: synthetic-cli-linux
           path: artifacts/synthetic-cli
           if-no-files-found: error
+      - name: Retain session evidence in the provisioned runner workspace
+        if: always() && inputs.runner == 'session'
+        shell: bash
+        run: |
+          test -d artifacts
+          echo "Session proof remains in $GITHUB_WORKSPACE/artifacts (artifact storage is unavailable from this environment)."

@@ -58,10 +58,16 @@ jobs:
       - name: "Click native wizard: pinned full.md audit and synthetic source-mapped installs"
         run: xvfb-run -a -s "-screen 0 1600x1000x24" corepack pnpm exec tsx tools/electron-clickthrough.ts --corpus guide-corpus --output artifacts/gui-linux
       - name: Upload source mappings, screenshots, traces, logs and file hashes
-        if: always()
+        if: always() && inputs.runner != 'session'
         uses: actions/upload-artifact@v4
         with:
           name: synthetic-native-gui-linux
           path: artifacts/gui-linux
           if-no-files-found: error
           retention-days: 14
+      - name: Retain session evidence in the provisioned runner workspace
+        if: always() && inputs.runner == 'session'
+        shell: bash
+        run: |
+          test -d artifacts
+          echo "Session proof remains in $GITHUB_WORKSPACE/artifacts (artifact storage is unavailable from this environment)."
