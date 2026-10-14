@@ -39,6 +39,8 @@ if (!hasLock) {
 let server: ModSyncServer | undefined;
 let baseUrl: string | undefined;
 let mainWindow: BrowserWindow | undefined;
+let quitting = false;
+let startupTask: Promise<void> | undefined;
 const token = randomBytes(32).toString("hex");
 
 /** nxm:// links that arrived before the server was listening. */
@@ -192,6 +194,7 @@ function createWindow(): BrowserWindow {
 }
 
 function ensureWindow(): BrowserWindow {
+  if (quitting) throw new Error("ModSync is shutting down");
   if (!mainWindow || mainWindow.isDestroyed()) mainWindow = createWindow();
   return mainWindow;
 }
@@ -208,14 +211,14 @@ async function menuOpenInstructionFile(): Promise<void> {
       { name: "All files", extensions: ["*"] },
     ],
   });
-  if (!file) return;
+  if (!file || quitting) return;
   try {
     const res = await apiPost("/api/file/load", { path: file });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`HTTP ${res.status} ${text}`.trim());
     }
-    ensureWindow().webContents.send(IPC.fileLoaded, file);
+    if (!quitting) ensureWindow().webContents.send(IPC.fileLoaded, file);
   } catch (err) {
     dialog.showErrorBox("Could not open instruction file", String(err));
   }
@@ -235,7 +238,7 @@ function buildMenu(): void {
       {
         label: "Open Editor",
         accelerator: "CmdOrCtrl+E",
-        click: () => void ensureWindow().loadURL(appUrl({}, "editor")),
+        click: () => { if (!quitting) void ensureWindow().loadURL(appUrl({}, "editor")); },
       },
       { type: "separator" },
       {
@@ -312,7 +315,7 @@ function buildMenu(): void {
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-async function startServer(): Promise<string> {
+async function startServer(): Promise<string | undefined> {
   if (!existsSync(STATIC_DIR)) {
     console.warn(
       `[modsync] web bundle not found at ${STATIC_DIR}; build it with "pnpm --filter @modsync/web build".`,
@@ -323,24 +326,25 @@ async function startServer(): Promise<string> {
     staticDir: STATIC_DIR,
     electronBridge,
     settingsPath: process.env.MODSYNC_SETTINGS_PATH,
+    onShutdownStage: (stage) => console.info(`[modsync] server shutdown: ${stage}`),
   });
-  return server.listen(0, "127.0.0.1");
+  if (quitting) return undefined;
+  const address = await server.listen(0, "127.0.0.1");
+  return quitting ? undefined : address;
 }
 
 async function stopServer(): Promise<void> {
   const s = server;
-  server = undefined;
-  baseUrl = undefined;
   if (!s) return;
-  try {
-    await s.close();
-  } catch (err) {
-    console.error(`[modsync] error closing server: ${String(err)}`);
-  }
+  await s.close();
+  if (server === s) server = undefined;
+  baseUrl = undefined;
+  console.info("[modsync] local server closed");
 }
 
 if (hasLock) {
-  app.whenReady().then(async () => {
+  startupTask = app.whenReady().then(async () => {
+    if (quitting) return;
     registerIpcHandlers();
     registerNxmProtocol();
 
@@ -352,6 +356,7 @@ if (hasLock) {
       return;
     }
 
+    if (quitting) return;
     buildMenu();
     ensureWindow();
 
@@ -361,6 +366,7 @@ if (hasLock) {
     flushPendingNxm();
 
     app.on("activate", () => {
+      if (quitting) return;
       if (BrowserWindow.getAllWindows().length === 0) ensureWindow();
     });
   }).catch((err) => {
@@ -369,20 +375,38 @@ if (hasLock) {
   });
 }
 
-let quitting = false;
+let shutdownComplete = false;
+let shutdownTask: Promise<void> | undefined;
+
+function requestShutdown(): void {
+  if (shutdownTask) return;
+  quitting = true;
+  console.info("[modsync] shutdown requested");
+  // Disconnect renderer clients before draining the server. All quit paths
+  // share this task; repeated events cannot bypass an unfinished close.
+  for (const win of BrowserWindow.getAllWindows()) win.destroy();
+  shutdownTask = (async () => {
+    await startupTask;
+    await stopServer();
+  })().then(() => {
+    shutdownComplete = true;
+    console.info("[modsync] shutdown complete");
+    app.quit();
+  }).catch((err) => {
+    console.error(`[modsync] shutdown failed: ${String(err)}`);
+    app.exit(1);
+  });
+}
 
 app.on("window-all-closed", () => {
-  if (quitting) return;
-  if (process.platform === "darwin") return;
-  void stopServer().finally(() => app.quit());
+  if (quitting || process.platform === "darwin") return;
+  requestShutdown();
 });
 
 app.on("before-quit", (event) => {
-  if (quitting || !server) return;
-  // Give the server a chance to shut down cleanly, then really quit.
+  if (shutdownComplete || !hasLock) return;
   event.preventDefault();
-  quitting = true;
-  // Close renderer WebSockets and HTTP keep-alives before awaiting the local server.
-  for (const win of BrowserWindow.getAllWindows()) win.destroy();
-  void stopServer().finally(() => app.quit());
+  requestShutdown();
 });
+
+app.on("will-quit", () => console.info("[modsync] will-quit"));

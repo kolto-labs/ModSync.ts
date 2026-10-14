@@ -25,6 +25,8 @@ export interface ModSyncServerOptions {
   electronBridge?: ElectronBridge;
   /** Fastify logger; default off. */
   logger?: boolean;
+  /** Lifecycle diagnostics for desktop shutdown; contains no request URLs or credentials. */
+  onShutdownStage?: (stage: "state-draining" | "state-drained" | "server-closed") => void;
   /** Ring buffer capacity for install/download events (default 5000). */
   eventBufferSize?: number;
 }

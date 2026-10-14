@@ -3,6 +3,7 @@
  * routes, static web bundle with SPA fallback).
  */
 import { existsSync } from "node:fs";
+import type { Socket } from "node:net";
 import { join, resolve as resolvePath } from "node:path";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
@@ -75,6 +76,27 @@ export async function createModSyncServer(opts: ModSyncServerOptions = {}): Prom
   });
   app.decorate("modsyncState", state);
 
+  // Node's initial idle sweep misses preconnects and connections that become
+  // idle after a request drains. End only idle HTTP sockets, never active ones.
+  let closing = false;
+  const httpSockets = new Map<Socket, number>();
+  app.server.on("connection", (socket) => {
+    if (closing) { socket.destroy(); return; }
+    httpSockets.set(socket, 0);
+    socket.once("close", () => httpSockets.delete(socket));
+  });
+  app.server.on("request", (request, response) => {
+    const socket = request.socket;
+    httpSockets.set(socket, (httpSockets.get(socket) ?? 0) + 1);
+    response.once("finish", () => {
+      const remaining = Math.max(0, (httpSockets.get(socket) ?? 1) - 1);
+      if (!httpSockets.has(socket)) return;
+      httpSockets.set(socket, remaining);
+      if (closing && remaining === 0) socket.end();
+    });
+  });
+  app.server.on("upgrade", (_request, socket) => httpSockets.delete(socket as Socket));
+
   await app.register(cors, {
     origin: (origin, cb) => cb(null, isLocalOrigin(origin)),
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -88,6 +110,10 @@ export async function createModSyncServer(opts: ModSyncServerOptions = {}): Prom
   // Accept text bodies (markdown / TOML uploads) as strings in addition to JSON.
   app.addContentTypeParser(["text/plain", "text/markdown", "application/toml"], { parseAs: "string" }, (_req, body, done) => {
     done(null, { content: body });
+  });
+
+  app.addHook("onRequest", async (_request, reply) => {
+    if (closing) reply.code(503).send({ error: "ShuttingDown", message: "Server is shutting down" });
   });
 
   // ------------------------------------------------------------------
@@ -151,7 +177,7 @@ export async function createModSyncServer(opts: ModSyncServerOptions = {}): Prom
     reply.code(404).send({ error: "NotFound", message: `Route ${req.method}:${req.url} not found` });
   });
 
-  let closed = false;
+  let closeTask: Promise<void> | undefined;
   return {
     app,
     async listen(port: number, host: string): Promise<string> {
@@ -163,11 +189,21 @@ export async function createModSyncServer(opts: ModSyncServerOptions = {}): Prom
       }
       return `http://${host}:${port}`;
     },
-    async close(): Promise<void> {
-      if (closed) return;
-      closed = true;
-      await state.close();
-      await app.close();
+    close(): Promise<void> {
+      if (closeTask) return closeTask;
+      closing = true;
+      closeTask = (async () => {
+        opts.onShutdownStage?.("state-draining");
+        await state.close();
+        opts.onShutdownStage?.("state-drained");
+        for (const [socket, active] of httpSockets) if (active === 0) socket.destroy();
+        await app.close();
+        // An admitted handler may have queued background work after the first drain.
+        await state.close();
+        opts.onShutdownStage?.("server-closed");
+      })();
+      return closeTask;
+
     },
   };
 }

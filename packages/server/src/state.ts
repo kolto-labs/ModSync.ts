@@ -414,6 +414,7 @@ export class AppState {
   async close(): Promise<void> {
     this.cancelInstall();
     this.downloads?.pause();
+    await this.downloads?.waitForIdle();
     await this.installTask;
     await this.settingsTask;
     await this.logger.flush();

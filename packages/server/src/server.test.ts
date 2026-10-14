@@ -23,6 +23,40 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 describe("server lifecycle and mutation guards", () => {
+  it("closes unused TCP preconnections while preserving an active request's drain", async () => {
+    const service = await server();
+    let release!: () => void;
+    let received!: () => void;
+    const receivedRequest = new Promise<void>((resolve) => { received = resolve; });
+    service.app.get("/slow-test", async () => {
+      received();
+      await new Promise<void>((resolve) => { release = resolve; });
+      return { completed: true };
+    });
+    const base = new URL(await service.listen(0, "127.0.0.1"));
+    const peer = connect(Number(base.port), "127.0.0.1");
+    try {
+      await new Promise<void>((resolve) => peer.once("connect", resolve));
+      peer.resume();
+      const response = fetch(new URL("/slow-test", base));
+      await receivedRequest;
+      let closed = false;
+      const shutdown = service.close().then(() => { closed = true; });
+      let concurrentClosed = false;
+      const concurrentShutdown = service.close().then(() => { concurrentClosed = true; });
+      await new Promise<void>((resolve) => peer.once("close", resolve));
+      expect(closed).toBe(false);
+      expect(concurrentClosed).toBe(false);
+      release();
+      expect(await (await response).json()).toEqual({ completed: true });
+      const started = performance.now();
+      await Promise.all([shutdown, concurrentShutdown]);
+      expect(performance.now() - started).toBeLessThan(2_000);
+    } finally {
+      release?.();
+      peer.destroy();
+    }
+  });
   it("closes within a bounded interval when a WebSocket peer never acknowledges shutdown", async () => {
     const service = await server();
     const base = new URL(await service.listen(0, "127.0.0.1"));
