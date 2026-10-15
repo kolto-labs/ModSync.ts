@@ -16,6 +16,7 @@ import * as fsp from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 
 import type { DirEntry, FileStat, FileSystemPort } from "../ports/filesystem.js";
+import { withInstallRootOwnership } from "./writerOwnership.js";
 import { comparePaths, joinPath, normalizePath, parentPath, splitPath } from "./paths.js";
 
 function errorCode(err: unknown): string | undefined {
@@ -31,6 +32,10 @@ function isMissing(err: unknown): boolean {
 
 export class RealFileSystem implements FileSystemPort {
   readonly isVirtual = false;
+
+  withInstallRootOwnership<T>(modDirectory: string, gameDirectory: string, work: () => Promise<T>): Promise<T> {
+    return withInstallRootOwnership(modDirectory, gameDirectory, work);
+  }
 
   inspectDirectoryEntries(path: string): Promise<DirEntry[]> { return this.readDir(path); }
 

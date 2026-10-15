@@ -71,6 +71,20 @@ export interface PatcherLog {
   filesBackedUp: string[];
   /** backup folder used (undefined when nothing was backed up) */
   backupDir?: string;
+  mutationPlan: PatcherMutationPlan;
+}
+
+export type PatcherMutation =
+  | { kind: "write"; path: string }
+  | { kind: "copy"; from: string; to: string }
+  | { kind: "rename"; from: string; to: string }
+  | { kind: "mkdirp"; path: string };
+
+export interface PatcherMutationPlan {
+  mode: "planned" | "applied";
+  complete: boolean;
+  mutations: PatcherMutation[];
+  unsupported: string[];
 }
 
 export const REMOVE_FILES_LIST = "remove these files.txt";
@@ -121,9 +135,11 @@ export class TslPatcher {
   private readonly tslpatchdataDir: string;
   private readonly gameDir: string;
   private readonly backupRoot: string;
+  private readonly backupIdentityBound: boolean;
   private backupEnabled = true;
+  private backupOutputsPlanned = false;
 
-  private log: PatcherLog = { errors: [], warnings: [], infos: [], filesWritten: [], filesBackedUp: [] };
+  private log: PatcherLog = { errors: [], warnings: [], infos: [], filesWritten: [], filesBackedUp: [], mutationPlan: { mode: "applied", complete: false, mutations: [], unsupported: [] } };
   private mem = new PatcherMemory();
   private readonly dirCache = new Map<string, string[]>();
   private readonly archives = new Map<string, Encapsulated>();
@@ -137,6 +153,7 @@ export class TslPatcher {
     this.dryRun = opts.dryRun ?? false;
     this.tslpatchdataDir = path.resolve(opts.tslpatchdataDir);
     this.gameDir = path.resolve(opts.gameDir);
+    this.backupIdentityBound = Boolean(opts.backupDir);
     this.backupRoot = opts.backupDir ? path.resolve(opts.backupDir) : path.join(path.dirname(this.tslpatchdataDir), "backup", timestamp());
   }
 
@@ -146,10 +163,11 @@ export class TslPatcher {
   }
 
   async apply(config: PatcherConfig): Promise<PatcherLog> {
-    this.log = { errors: [], warnings: [], infos: [], filesWritten: [], filesBackedUp: [] };
+    this.log = { errors: [], warnings: [], infos: [], filesWritten: [], filesBackedUp: [], mutationPlan: { mode: this.dryRun ? "planned" : "applied", complete: false, mutations: [], unsupported: [] } };
     this.mem = new PatcherMemory();
     this.touched.clear();
     this.createdFiles = [];
+    this.backupOutputsPlanned = false;
     this.archives.clear();
     this.overlay.clear();
     this.dirCache.clear();
@@ -165,8 +183,18 @@ export class TslPatcher {
       for (const f of config.compile) await this.guard(`CompileList ${f.filename}`, () => this.processCompile(f));
       for (const f of config.hack) await this.guard(`HACKList ${f.filename}`, () => this.processHack(f));
       for (const f of config.ssf) await this.guard(`SSFList ${f.filename}`, () => this.processSsf(f));
+    } catch (error) {
+      this.markUnsupported("patcher apply aborted before completion");
+      throw error;
     } finally {
-      await this.finishBackup();
+      try {
+        await this.finishBackup();
+      } catch (error) {
+        this.markUnsupported("backup finalization failed");
+        throw error;
+      } finally {
+        this.finalizeMutationPlan();
+      }
     }
     this.info(`done: ${this.log.filesWritten.length} file(s) ${this.dryRun ? "would be " : ""}written, ${this.log.warnings.length} warning(s), ${this.log.errors.length} error(s)`);
     return this.log;
@@ -352,8 +380,10 @@ export class TslPatcher {
     await this.backupBeforeWrite(abs);
     this.overlay.set(abs, data);
     if (!this.log.filesWritten.includes(abs)) this.log.filesWritten.push(abs);
+    this.recordMutation({ kind: "mkdirp", path: path.dirname(abs) });
+    if (!this.dryRun) await this.fs.mkdirp(path.dirname(abs));
+    this.recordMutation({ kind: "write", path: abs });
     if (this.dryRun) return;
-    await this.fs.mkdirp(path.dirname(abs));
     await this.fs.writeFile(abs, data);
     this.noteCreated(abs);
   }
@@ -361,7 +391,6 @@ export class TslPatcher {
   private async backupBeforeWrite(abs: string): Promise<void> {
     if (this.touched.has(abs)) return;
     this.touched.add(abs);
-    if (this.dryRun) return;
     const exists = await this.fs.exists(abs);
     if (!exists) {
       this.createdFiles.push(abs);
@@ -370,7 +399,14 @@ export class TslPatcher {
     if (!this.backupEnabled) return;
     const rel = path.relative(this.gameDir, abs);
     const target = path.join(this.backupRoot, rel.startsWith("..") ? path.basename(abs) : rel);
+    this.backupOutputsPlanned = true;
+    this.recordMutation({ kind: "mkdirp", path: path.dirname(target) });
+    if (this.dryRun) {
+      this.recordMutation({ kind: "copy", from: abs, to: target });
+      return;
+    }
     await this.fs.mkdirp(path.dirname(target));
+    this.recordMutation({ kind: "copy", from: abs, to: target });
     await this.fs.copyFile(abs, target);
     this.log.filesBackedUp.push(abs);
     this.log.backupDir = this.backupRoot;
@@ -378,15 +414,37 @@ export class TslPatcher {
   }
 
   private async finishBackup(): Promise<void> {
-    if (this.dryRun || !this.backupEnabled) return;
-    if (this.createdFiles.length === 0 && this.log.filesBackedUp.length === 0) return;
-    await this.fs.mkdirp(this.backupRoot);
-    this.log.backupDir = this.backupRoot;
+    if (!this.backupEnabled) return;
+    const hasBackups = this.dryRun ? this.backupOutputsPlanned : this.log.filesBackedUp.length > 0;
+    if (this.createdFiles.length === 0 && !hasBackups) return;
+    this.backupOutputsPlanned = true;
+    this.recordMutation({ kind: "mkdirp", path: this.backupRoot });
+    if (!this.dryRun) await this.fs.mkdirp(this.backupRoot);
+    if (!this.dryRun) this.log.backupDir = this.backupRoot;
     if (this.createdFiles.length > 0) {
-      await this.fs.writeFile(path.join(this.backupRoot, REMOVE_FILES_LIST), encodeCp1252(this.createdFiles.join("\n") + "\n"));
+      const removeListPath = path.join(this.backupRoot, REMOVE_FILES_LIST);
+      this.recordMutation({ kind: "write", path: removeListPath });
+      if (!this.dryRun) await this.fs.writeFile(removeListPath, encodeCp1252(this.createdFiles.join("\n") + "\n"));
     }
+    const manifestPath = path.join(this.backupRoot, UNINSTALL_MANIFEST);
     const manifest = { gameDir: this.gameDir, created: this.createdFiles, backedUp: this.log.filesBackedUp, timestamp: new Date().toISOString() };
-    await this.fs.writeFile(path.join(this.backupRoot, UNINSTALL_MANIFEST), new TextEncoder().encode(JSON.stringify(manifest, null, 2)));
+    this.recordMutation({ kind: "write", path: manifestPath });
+    if (this.dryRun) return;
+    this.log.backupDir = this.backupRoot;
+    await this.fs.writeFile(manifestPath, new TextEncoder().encode(JSON.stringify(manifest, null, 2)));
+  }
+
+  private recordMutation(mutation: PatcherMutation): void {
+    this.log.mutationPlan.mutations.push(mutation);
+  }
+
+  private markUnsupported(reason: string): void {
+    if (!this.log.mutationPlan.unsupported.includes(reason)) this.log.mutationPlan.unsupported.push(reason);
+  }
+
+  private finalizeMutationPlan(): void {
+    if (this.backupOutputsPlanned && !this.backupIdentityBound) this.markUnsupported("backup output identity is not caller-bound");
+    this.log.mutationPlan.complete = this.log.errors.length === 0 && this.log.mutationPlan.unsupported.length === 0;
   }
 
   /** `!OverrideType` handling when installing into a module while Override holds a same-named file. */
@@ -400,14 +458,24 @@ export class TslPatcher {
     }
     const bak = `${r.path}.bak`;
     if (this.dryRun) {
+      if (!this.fs.rename) {
+        this.markUnsupported(`rename unavailable for ${r.path} -> ${bak}`);
+        this.info(`would rename ${r.path} to ${bak}`);
+        return;
+      }
+      this.markUnsupported("dry-run rename state projection is not implemented");
+      await this.backupBeforeWrite(r.path);
+      this.recordMutation({ kind: "rename", from: r.path, to: bak });
       this.info(`would rename ${r.path} to ${bak}`);
       return;
     }
     if (!this.fs.rename) {
       this.warn(`cannot rename ${r.path} to .bak: file system does not support rename`);
+      this.markUnsupported(`rename unavailable for ${r.path} -> ${bak}`);
       return;
     }
     await this.backupBeforeWrite(r.path);
+    this.recordMutation({ kind: "rename", from: r.path, to: bak });
     await this.fs.rename(r.path, bak);
     this.dirCache.delete(path.dirname(r.path));
     this.info(`renamed ${r.path} to ${bak}`);

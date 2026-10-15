@@ -8,7 +8,7 @@ NODE_API_INCLUDE_DIR=/path/to/node/include/node node packages/core/native/build.
 
 The internal module locks ordinary file descriptors without truncating or unlinking files. Unix uses `flock(LOCK_EX | LOCK_NB)`. Windows source uses `LockFileEx` with zero offset and both length words `0xffffffff`, matching Rust `fs2` 0.4.3. Release refuses descriptors this addon did not acquire or whose identity changed.
 
-`fs/writerOwnership.ts` holds private file handles, verifies stable root and lock identities, reserves canonical lock paths within the process, and acquires both mod and game root locks in UTF-8 path order. This first implementation requires existing lock files; absent locks fail closed. It is not connected to checkpoint writers or physical installation.
+`fs/writerOwnership.ts` holds private file handles, verifies stable root and lock identities, reserves canonical lock paths within the process, and acquires both mod and game root locks in UTF-8 path order. The new `RealFileSystem` ownership capability creates absent sibling lock files atomically with exclusive/no-follow flags and restrictive permissions; existing lock files are opened without truncation. Lock files are persistent and are never unlinked. The legacy `withExistingWriterOwnership` and `withExistingInstallRootOwnership` exports still fail if their lock files are absent. This capability is not connected to checkpoint writers or physical installation.
 
 Linux production compilation and refusal against the real live authoring session lock are verified. macOS and Windows compilation/runtime are unproven. The TypeScript safe-open wrapper explicitly refuses Windows until a native reparse-safe file opener exists. No platform compatibility is inferred from the conditional source alone.
 

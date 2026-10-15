@@ -67,8 +67,9 @@ export async function executePatcher(
       ? await resolveDestination(ctx, instruction.destination)
       : normalizePath(ctx.dirs.kotorDirectory);
 
-    const { iniName, namespaceIndex: requestedNamespace } = parsePatcherArguments(instruction.arguments);
-    let namespaceIndex = requestedNamespace;
+    const parsedArguments = parsePatcherArguments(instruction.arguments);
+    let iniName = parsedArguments.iniName;
+    let namespaceIndex = parsedArguments.namespaceIndex;
     if (namespaceIndex === undefined && iniName === undefined) {
       let namespaces;
       try {

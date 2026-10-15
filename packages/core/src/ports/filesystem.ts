@@ -26,6 +26,7 @@ export interface DirEntry {
 }
 
 export interface FileSystemPort {
+  withInstallRootOwnership?<T>(modDirectory: string, gameDirectory: string, work: () => Promise<T>): Promise<T>;
   /** Non-following metadata required for directory authoring safety; omitted ports fail closed. */
   /** Preserve case-collision entries for strict directory authoring checks. */
   inspectDirectoryEntries?(path: string): Promise<DirEntry[]>;
