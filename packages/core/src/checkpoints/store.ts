@@ -55,6 +55,7 @@ export interface StoredCheckpointSession extends CheckpointSession {
   /** Durable multi-document publication intent. No automatic recovery/acknowledgement. */
   pendingPublication?: { kind: "baseline" | "checkpoint"; previousIndex: number; targetIndex: number; baselineCount: number; storeDirectory: string; kotorDirectory: string; startedAt: string };
   pendingMutation?: { schemaVersion?: number; operationId?: string; binding?: {sessionId:string;storeDirectory:string;kotorDirectory:string}; baselineSha256?:string; previousManifestSha256?:string; instructionGuid: Guid; previousCheckpointId: string; predicted: string[]; startedAt: string; completedCheckpointId?: string };
+  pendingRestore?: { schemaVersion: 1; operationId: string; binding: { sessionId: string; storeDirectory: string; kotorDirectory: string }; targetCheckpointId: string; targetCheckpointIndex: number; targetStateSha256: string; startedAt: string };
 }
 
 /** `<index>.json` on disk. */
@@ -150,6 +151,7 @@ function validateSession(value:unknown,sessionId:string):asserts value is Stored
  const publication=value.pendingPublication;if(publication!==undefined){if(!record(publication)||(publication.kind!=="baseline"&&publication.kind!=="checkpoint")||typeof publication.startedAt!=="string")throw new CheckpointError("Invalid checkpoint publication intent");safeIndex(publication.previousIndex);safeIndex(publication.targetIndex);safeIndex(publication.baselineCount);safeAbsolute(publication.storeDirectory);safeAbsolute(publication.kotorDirectory);if(publication.kotorDirectory!==value.kotorDirectory||publication.previousIndex!==value.checkpoints.length-1||publication.targetIndex!==publication.previousIndex+(publication.kind==="checkpoint"?1:0))throw new CheckpointError("Checkpoint publication intent disagrees with saved history/root");}
  const pending=value.pendingMutation;if(record(pending)&&pending.schemaVersion===1){if(typeof pending.operationId!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(pending.operationId)||!record(pending.binding)||pending.binding.sessionId!==sessionId||pending.binding.kotorDirectory!==value.kotorDirectory)throw new CheckpointError("Invalid schema1 checkpoint operation binding");safeAbsolute(pending.binding.storeDirectory);safeAbsolute(pending.binding.kotorDirectory);for(const digest of [pending.baselineSha256,pending.previousManifestSha256])if(typeof digest!=="string"||!/^[0-9a-f]{64}$/.test(digest))throw new CheckpointError("Invalid checkpoint manifest observation digest");}
  if(pending!==undefined){if(!record(pending)||typeof pending.instructionGuid!=="string"||!Array.isArray(pending.predicted)||!value.checkpoints.some(cp=>(cp as Record<string,unknown>).id===pending.previousCheckpointId)||typeof pending.startedAt!=="string")throw new CheckpointError("Invalid checkpoint pending mutation");pending.predicted.forEach(safeAbsolute);if(pending.completedCheckpointId!==undefined){const completed=value.checkpoints.find(cp=>(cp as Record<string,unknown>).id===pending.completedCheckpointId),previous=value.checkpoints.find(cp=>(cp as Record<string,unknown>).id===pending.previousCheckpointId);if(!record(completed)||!record(previous)||completed.instructionGuid!==pending.instructionGuid||completed.index!==(previous.index as number)+1)throw new CheckpointError("Invalid checkpoint completion identity");}}
+ const restore=value.pendingRestore;if(restore!==undefined){if(!record(restore)||restore.schemaVersion!==1||typeof restore.operationId!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(restore.operationId)||!record(restore.binding)||restore.binding.sessionId!==sessionId||restore.binding.kotorDirectory!==value.kotorDirectory||typeof restore.targetCheckpointId!=="string"||typeof restore.targetStateSha256!=="string"||!/^[0-9a-f]{64}$/.test(restore.targetStateSha256)||typeof restore.startedAt!=="string")throw new CheckpointError("Invalid checkpoint restore intent");safeAbsolute(restore.binding.storeDirectory);safeAbsolute(restore.binding.kotorDirectory);safeIndex(restore.targetCheckpointIndex);if(!value.checkpoints.some(cp=>cp.id===restore.targetCheckpointId&&cp.index===restore.targetCheckpointIndex))throw new CheckpointError("Checkpoint restore intent targets unknown checkpoint");}
 }
 function validateManifest(value:unknown,sessionId:string,index:number):asserts value is CheckpointManifest {
  if(!record(value)||value.id!==`${sessionId}-${index}`||value.index!==index||typeof value.isAnchor!=="boolean"||!Array.isArray(value.entries))throw new CheckpointError("Invalid checkpoint manifest identity");
@@ -276,6 +278,7 @@ export class CheckpointStore {
       const stored=await this.getSession(name);
       if(stored.pendingPublication)throw new CheckpointError(`Unfinished checkpoint publication ${stored.id} requires recovery`);
       if(stored.pendingMutation&&!stored.pendingMutation.completedCheckpointId)throw new CheckpointError(`Unfinished checkpoint session ${stored.id} requires recovery`);
+      if(stored.pendingRestore)throw new CheckpointError(`Unfinished checkpoint restore ${stored.id} requires recovery`);
     }
     const id = nowId();
     const createdAt = new Date().toISOString();
@@ -331,6 +334,7 @@ export class CheckpointStore {
       const stored=await this.getSession(sessionId);
       if(stored.pendingPublication)throw new CheckpointError("Cannot delete an unfinished checkpoint publication");
       if(stored.pendingMutation&&!stored.pendingMutation.completedCheckpointId)throw new CheckpointError("Cannot delete an unfinished recovery session");
+      if(stored.pendingRestore)throw new CheckpointError("Cannot delete an unfinished checkpoint restore");
       await rm(this.sessionDir(sessionId), { recursive: true, force: true });
     });
   }
@@ -344,7 +348,7 @@ export class CheckpointStore {
     const referenced = new Set<string>();
     for (const s of await this.list()) {
       const stored=await this.getSession(s.id);
-      if(stored.pendingPublication||(stored.pendingMutation&&!stored.pendingMutation.completedCheckpointId))throw new CheckpointError("Garbage collection is unavailable while checkpoint recovery is pending");
+      if(stored.pendingPublication||(stored.pendingMutation&&!stored.pendingMutation.completedCheckpointId)||stored.pendingRestore)throw new CheckpointError("Garbage collection is unavailable while checkpoint recovery is pending");
       for (const cp of s.checkpoints) {
         const m = await this.readManifest(s.id, cp.index);
         for (const e of m.entries) if (e.sha1) referenced.add(e.sha1);
@@ -523,14 +527,46 @@ export class CheckpointStore {
   }
 
   /** Inventory only. Neither a completed marker nor a hash observation proves quiescence. */
-  async inspectRecovery(sessionId:string):Promise<{sessionId:string;recoveryAvailable:false;physicalRestore:false;pendingPublication:boolean;mutationSchema:"schema1"|"legacy"|"none";mutationStatus:"unfinished"|"completed-audit"|"none";reason:string}>{
+  async inspectRecovery(sessionId:string):Promise<{sessionId:string;recoveryAvailable:false;physicalRestore:false;pendingPublication:boolean;pendingRestore:boolean;mutationSchema:"schema1"|"legacy"|"none";mutationStatus:"unfinished"|"completed-audit"|"none";reason:string}>{
     const stored=await this.getSession(sessionId),pending=stored.pendingMutation;
-    return {sessionId:stored.id,recoveryAvailable:false,physicalRestore:false,pendingPublication:!!stored.pendingPublication,mutationSchema:pending?(pending.schemaVersion===1?"schema1":"legacy"):"none",mutationStatus:pending?(pending.completedCheckpointId?"completed-audit":"unfinished"):"none",reason:"Paired install-root ownership, external-writer quiescence and verified durable recovery acknowledgement are unavailable"};
+    return {sessionId:stored.id,recoveryAvailable:false,physicalRestore:false,pendingPublication:!!stored.pendingPublication,pendingRestore:!!stored.pendingRestore,mutationSchema:pending?(pending.schemaVersion===1?"schema1":"legacy"):"none",mutationStatus:pending?(pending.completedCheckpointId?"completed-audit":"unfinished"):"none",reason:"Paired install-root ownership, external-writer quiescence and verified durable recovery acknowledgement are unavailable"};
   }
 
   private requirePublished(session:StoredCheckpointSession):void {
     if(session.kotorDirectory!==this.kotorDirectory)throw new CheckpointError("Checkpoint session belongs to a different game root");
     if(session.pendingPublication)throw new CheckpointError("Unfinished checkpoint publication requires verified recovery; state cannot be reconstructed or recorded");
+    if(session.pendingRestore)throw new CheckpointError("Unfinished checkpoint restore requires verified recovery; state cannot be reconstructed or recorded");
+  }
+
+  private async stateObservation(sessionId:string,index:number):Promise<string>{
+    const state=await this.computeState(sessionId,index),canonical=[...state.entries()].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([path,sha1])=>`${path}\0${sha1??""}\n`).join("");
+    return createHash("sha256").update(canonical).digest("hex");
+  }
+
+  async beginRestoreIntent(sessionId:string,checkpointId:string):Promise<{operationId:string;targetCheckpointId:string;targetCheckpointIndex:number;targetStateSha256:string}>{
+    return this.withLock(sessionId,async()=>{
+      const stored=await this.getSession(sessionId);this.requirePublished(stored);
+      if(stored.pendingMutation&&!stored.pendingMutation.completedCheckpointId)throw new CheckpointError("Unfinished mutation requires recovery before checkpoint restore");
+      const checkpoint=this.findCheckpoint(stored,checkpointId),state=await this.computeState(sessionId,checkpoint.index),verified=new Set<string>();
+      for(const sha1 of state.values())if(sha1!==undefined&&!verified.has(sha1)){await this.readBlob(sha1);verified.add(sha1);}
+      const targetStateSha256=await this.stateObservation(sessionId,checkpoint.index),operationId=randomUUID();
+      stored.pendingRestore={schemaVersion:1,operationId,binding:{sessionId:stored.id,storeDirectory:this.rootDir,kotorDirectory:this.kotorDirectory},targetCheckpointId:checkpoint.id,targetCheckpointIndex:checkpoint.index,targetStateSha256,startedAt:new Date().toISOString()};
+      await writeJsonAtomic(this.sessionFile(sessionId),stored);
+      return {operationId,targetCheckpointId:checkpoint.id,targetCheckpointIndex:checkpoint.index,targetStateSha256};
+    });
+  }
+
+  async getRestoreIntent(sessionId:string):Promise<StoredCheckpointSession["pendingRestore"]>{
+    const stored=await this.getSession(sessionId);return stored.pendingRestore;
+  }
+
+  async acknowledgeRestore(sessionId:string,operationId:string,verifiedStateSha256:string):Promise<void>{
+    return this.withLock(sessionId,async()=>{
+      const stored=await this.getSession(sessionId),restore=stored.pendingRestore;
+      if(!restore||restore.operationId!==operationId)throw new CheckpointError("Checkpoint restore intent identity changed");
+      if(!/^[0-9a-f]{64}$/.test(verifiedStateSha256)||verifiedStateSha256!==restore.targetStateSha256)throw new CheckpointError("Checkpoint restore verification digest mismatch");
+      delete stored.pendingRestore;await writeJsonAtomic(this.sessionFile(sessionId),stored);
+    });
   }
 
   private async beginPublication(stored:StoredCheckpointSession,kind:"baseline"|"checkpoint",baselineCount:number):Promise<void>{
