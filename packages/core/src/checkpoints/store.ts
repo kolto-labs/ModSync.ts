@@ -557,15 +557,22 @@ export class CheckpointStore {
   }
 
   async getRestoreIntent(sessionId:string):Promise<StoredCheckpointSession["pendingRestore"]>{
-    const stored=await this.getSession(sessionId);return stored.pendingRestore;
+    const stored=await this.getSession(sessionId),restore=stored.pendingRestore;
+    if (restore && (restore.binding.storeDirectory !== this.rootDir || restore.binding.kotorDirectory !== this.kotorDirectory)) {
+      throw new CheckpointError("Checkpoint restore intent belongs to a different store or game root");
+    }
+    return restore;
   }
 
   async acknowledgeRestore(sessionId:string,operationId:string,verifiedStateSha256:string):Promise<void>{
     return this.withLock(sessionId,async()=>{
       const stored=await this.getSession(sessionId),restore=stored.pendingRestore;
       if(!restore||restore.operationId!==operationId)throw new CheckpointError("Checkpoint restore intent identity changed");
-      if(!/^[0-9a-f]{64}$/.test(verifiedStateSha256)||verifiedStateSha256!==restore.targetStateSha256)throw new CheckpointError("Checkpoint restore verification digest mismatch");
-      delete stored.pendingRestore;await writeJsonAtomic(this.sessionFile(sessionId),stored);
+      if (restore.binding.storeDirectory !== this.rootDir || restore.binding.kotorDirectory !== this.kotorDirectory) {
+        throw new CheckpointError("Checkpoint restore intent belongs to a different store or game root");
+      }
+      void verifiedStateSha256;
+      throw new CheckpointError("Physical restore verification authority is not implemented; restore intent remains pending");
     });
   }
 
