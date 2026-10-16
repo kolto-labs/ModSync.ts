@@ -27,6 +27,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readFile, readdir, realpath, rename, rm, stat, lstat } from "node:fs/promises";
 import { dirname, join, resolve, basename, isAbsolute } from "node:path";
 import type { FileSystemPort } from "../ports/filesystem.js";
+import { withPortableRootOwnership, type PhysicalInstallOptIn } from "../fs/portableLock.js";
 import type { CheckpointFileEntry, CheckpointMeta, CheckpointSession, Guid } from "../model/types.js";
 
 export interface CheckpointStoreOptions {
@@ -38,6 +39,11 @@ export interface CheckpointStoreOptions {
   fs: FileSystemPort;
   /** Every Nth checkpoint is a full manifest. Default 10. */
   anchorInterval?: number;
+  /**
+   * CI-only explicit opt-in to restore a non-virtual game directory under the
+   * portable lockfile. Without it physical restore stays refused.
+   */
+  physicalRestore?: PhysicalInstallOptIn;
 }
 
 export interface CreateCheckpointMeta {
@@ -46,11 +52,19 @@ export interface CreateCheckpointMeta {
   instructionGuid?: Guid;
   /** Absolute paths (files or directories) the instruction reported as created/modified/deleted. */
   touched: string[];
+  /**
+   * Subset of `touched` that was not passed to `beforeTouch` first (patchers,
+   * external programs). Their pre-mutation content is unknown, so a physical
+   * restore to an earlier checkpoint is refused.
+   */
+  unpredicted?: string[];
 }
 
 /** `session.json` on disk: the public session plus the label given to `startSession`. */
 export interface StoredCheckpointSession extends CheckpointSession {
   label: string;
+  /** Checkpoint indexes that first saw paths whose true baseline is unknown (recorded as absent). */
+  unverifiedBaselineAt?: number[];
   /** Durable unfinished instruction; retained if execution/checkpoint finalization fails. */
   /** Durable multi-document publication intent. No automatic recovery/acknowledgement. */
   pendingPublication?: { kind: "baseline" | "checkpoint"; previousIndex: number; targetIndex: number; baselineCount: number; storeDirectory: string; kotorDirectory: string; startedAt: string };
@@ -193,6 +207,7 @@ export class CheckpointStore {
   readonly kotorDirectory: string;
   readonly anchorInterval: number;
   private readonly fs: FileSystemPort;
+  private readonly physicalRestore: PhysicalInstallOptIn | undefined;
   /** Root-wide same-process serialization covers CAS capture through reference publication and GC. */
 
 
@@ -201,6 +216,7 @@ export class CheckpointStore {
     this.rootDir = toPosix(opts.rootDir);safeAbsolute(this.rootDir);
     this.kotorDirectory = toPosix(opts.kotorDirectory);safeAbsolute(this.kotorDirectory);
     this.fs = opts.fs;
+    this.physicalRestore = opts.physicalRestore;
     this.anchorInterval = Math.max(1, Math.floor(opts.anchorInterval ?? 10));
   }
 
@@ -374,9 +390,9 @@ export class CheckpointStore {
   // Manifests
   // ---------------------------------------------------------------------
 
-  private async readManifest(sessionId: string, index: number): Promise<CheckpointManifest> {
+  private async readManifest(sessionId: string, index: number, duringRestore = false): Promise<CheckpointManifest> {
     try {
-      safeSessionId(sessionId);safeIndex(index);const session=await this.getSession(sessionId);this.requirePublished(session);const checkpoint=session.checkpoints[index];if(!checkpoint)throw new CheckpointError("Checkpoint manifest index is outside the saved history");
+      safeSessionId(sessionId);safeIndex(index);const session=await this.getSession(sessionId);this.requirePublished(session,duringRestore);const checkpoint=session.checkpoints[index];if(!checkpoint)throw new CheckpointError("Checkpoint manifest index is outside the saved history");
       const value=await readJson<unknown>(this.manifestFile(sessionId,index));validateManifest(value,sessionId,index);
       if(value.isAnchor!==checkpoint.isAnchor||((index===0||!checkpoint.isAnchor)&&value.entries.length!==checkpoint.changedCount)||(checkpoint.isAnchor&&value.entries.length<checkpoint.changedCount))throw new CheckpointError("Checkpoint manifest disagrees with saved anchor/count metadata");return value;
     } catch {
@@ -393,17 +409,17 @@ export class CheckpointStore {
     return cp;
   }
 
-  private async computeState(sessionId: string, index: number): Promise<CheckpointState> {
+  private async computeState(sessionId: string, index: number, duringRestore = false): Promise<CheckpointState> {
     safeIndex(index);const session=await this.getSession(sessionId);if(!session.checkpoints[index])throw new CheckpointError("Checkpoint index is outside saved history");
     const state: CheckpointState = new Map(),spellings=new Map<string,string>();
     const apply = (m: CheckpointManifest) => {
       for (const e of m.entries) {rememberCasePath(e.path,spellings);state.set(e.path, e.sha1);}
     };
-    apply(await this.readManifest(sessionId, 0));
+    apply(await this.readManifest(sessionId, 0, duringRestore));
     if (index === 0) return state;
     const anchor = session.checkpoints.slice(0,index+1).reduce((nearest,checkpoint)=>checkpoint.isAnchor?checkpoint.index:nearest,0);
-    if (anchor > 0) apply(await this.readManifest(sessionId, anchor));
-    for (let i = anchor + 1; i <= index; i++) apply(await this.readManifest(sessionId, i));
+    if (anchor > 0) apply(await this.readManifest(sessionId, anchor, duringRestore));
+    for (let i = anchor + 1; i <= index; i++) apply(await this.readManifest(sessionId, i, duringRestore));
     return state;
   }
 
@@ -532,10 +548,11 @@ export class CheckpointStore {
     return {sessionId:stored.id,recoveryAvailable:false,physicalRestore:false,pendingPublication:!!stored.pendingPublication,pendingRestore:!!stored.pendingRestore,mutationSchema:pending?(pending.schemaVersion===1?"schema1":"legacy"):"none",mutationStatus:pending?(pending.completedCheckpointId?"completed-audit":"unfinished"):"none",reason:"Paired install-root ownership, external-writer quiescence and verified durable recovery acknowledgement are unavailable"};
   }
 
-  private requirePublished(session:StoredCheckpointSession):void {
+  /** `duringRestore` lets the verified physical restore read manifests while its own intent is pending. */
+  private requirePublished(session:StoredCheckpointSession,duringRestore=false):void {
     if(session.kotorDirectory!==this.kotorDirectory)throw new CheckpointError("Checkpoint session belongs to a different game root");
     if(session.pendingPublication)throw new CheckpointError("Unfinished checkpoint publication requires verified recovery; state cannot be reconstructed or recorded");
-    if(session.pendingRestore)throw new CheckpointError("Unfinished checkpoint restore requires verified recovery; state cannot be reconstructed or recorded");
+    if(session.pendingRestore&&!duringRestore)throw new CheckpointError("Unfinished checkpoint restore requires verified recovery; state cannot be reconstructed or recorded");
   }
 
   private async stateObservation(sessionId:string,index:number):Promise<string>{
@@ -543,10 +560,27 @@ export class CheckpointStore {
     return createHash("sha256").update(canonical).digest("hex");
   }
 
-  async beginRestoreIntent(sessionId:string,checkpointId:string):Promise<{operationId:string;targetCheckpointId:string;targetCheckpointIndex:number;targetStateSha256:string}>{
+  /** Hash of the tracked paths as they are on disk now, in the same canonical form as `stateObservation`. */
+  private async diskStateObservation(sessionId:string,index:number):Promise<string>{
+    const state=await this.computeState(sessionId,index,true),lines:string[]=[];
+    for(const rel of [...state.keys()].sort((a,b)=>a<b?-1:a>b?1:0)){
+      const abs=this.absolutePath(rel);await ordinaryPath(abs,"entry",true);const st=await this.fs.stat(abs);
+      lines.push(`${rel}\0${st&&!st.isDirectory?await this.fs.sha1(abs):""}\n`);
+    }
+    return createHash("sha256").update(lines.join("")).digest("hex");
+  }
+
+  beginRestoreIntent(sessionId:string,checkpointId:string):Promise<{operationId:string;targetCheckpointId:string;targetCheckpointIndex:number;targetStateSha256:string}>{
+    return this.beginRestoreIntentOwned(sessionId,checkpointId,false);
+  }
+
+  /** `allowUnfinishedMutationRollback` permits only the checkpoint taken before the unfinished instruction. */
+  private async beginRestoreIntentOwned(sessionId:string,checkpointId:string,allowUnfinishedMutationRollback:boolean):Promise<{operationId:string;targetCheckpointId:string;targetCheckpointIndex:number;targetStateSha256:string}>{
     return this.withLock(sessionId,async()=>{
       const stored=await this.getSession(sessionId);this.requirePublished(stored);
-      if(stored.pendingMutation&&!stored.pendingMutation.completedCheckpointId)throw new CheckpointError("Unfinished mutation requires recovery before checkpoint restore");
+      const unfinished=stored.pendingMutation&&!stored.pendingMutation.completedCheckpointId?stored.pendingMutation:undefined;
+      if(unfinished&&allowUnfinishedMutationRollback&&unfinished.predicted.length===0)throw new CheckpointError("Unfinished mutation had no predicted paths (patcher/external program); its partial effects cannot be rolled back from checkpoints");
+      if(unfinished&&!(allowUnfinishedMutationRollback&&this.findCheckpoint(stored,checkpointId).id===unfinished.previousCheckpointId))throw new CheckpointError(allowUnfinishedMutationRollback?"Unfinished mutation can only be rolled back to the checkpoint taken just before it":"Unfinished mutation requires recovery before checkpoint restore");
       const checkpoint=this.findCheckpoint(stored,checkpointId),state=await this.computeState(sessionId,checkpoint.index),verified=new Set<string>();
       for(const sha1 of state.values())if(sha1!==undefined&&!verified.has(sha1)){await this.readBlob(sha1);verified.add(sha1);}
       const targetStateSha256=await this.stateObservation(sessionId,checkpoint.index),operationId=randomUUID();
@@ -571,8 +605,18 @@ export class CheckpointStore {
       if (restore.binding.storeDirectory !== this.rootDir || restore.binding.kotorDirectory !== this.kotorDirectory) {
         throw new CheckpointError("Checkpoint restore intent belongs to a different store or game root");
       }
-      void verifiedStateSha256;
-      throw new CheckpointError("Physical restore verification authority is not implemented; restore intent remains pending");
+      if (this.physicalRestore?.ownership !== "portable-lockfile") {
+        throw new CheckpointError("Physical restore verification authority is not implemented; restore intent remains pending");
+      }
+      const observed = await this.diskStateObservation(sessionId, restore.targetCheckpointIndex);
+      if (observed !== restore.targetStateSha256 || observed !== verifiedStateSha256) {
+        throw new CheckpointError("Physical restore verification failed: on-disk state does not match the checkpoint; restore intent remains pending");
+      }
+      delete stored.pendingRestore;
+      if (stored.pendingMutation && !stored.pendingMutation.completedCheckpointId && stored.pendingMutation.previousCheckpointId === restore.targetCheckpointId) {
+        delete stored.pendingMutation;
+      }
+      await writeJsonAtomic(this.sessionFile(sessionId), stored);
     });
   }
 
@@ -626,8 +670,11 @@ export class CheckpointStore {
       const prevState = await this.computeState(session.id, prevIndex);
       const tracked = new Set(baseline.entries.map((e) => e.path));
       let baselineDirty = false;
+      const unpredicted = new Set(await this.expandPaths(meta.unpredicted ?? []));
+      let unverified = false;
       for (const rel of rels) {
         if (!tracked.has(rel)) {
+          if (unpredicted.has(rel)) unverified = true;
           baseline.entries.push({ path: rel });
           prevState.set(rel, undefined);
           tracked.add(rel);
@@ -670,6 +717,7 @@ export class CheckpointStore {
         changedCount: changed.length,
         storedBytes,
       };
+      if (unverified) stored.unverifiedBaselineAt = [...(stored.unverifiedBaselineAt ?? []), index];
       await this.beginPublication(stored,"checkpoint",baseline.entries.length);
       if(baselineDirty)await writeJsonAtomic(this.manifestFile(session.id,0),baseline);
       await writeJsonAtomic(this.manifestFile(session.id, index), { id, index, isAnchor, entries } satisfies CheckpointManifest);
@@ -693,9 +741,35 @@ export class CheckpointStore {
    * on-disk hash already matches are skipped.
    */
   restore(sessionId: string, checkpointId: string, onProgress?: RestoreProgress): Promise<void> {
-    if (!this.fs.isVirtual) return Promise.reject(new CheckpointError("Independent TypeScript physical checkpoint restore is unavailable until paired OS writer ownership and verified quiescence/recovery are implemented"));
+    if (!this.fs.isVirtual) {
+      if (this.physicalRestore?.ownership !== "portable-lockfile") return Promise.reject(new CheckpointError("Independent TypeScript physical checkpoint restore is unavailable until paired OS writer ownership and verified quiescence/recovery are implemented. CI-only explicit opt-in: portable lockfile ownership (see docs/PHYSICAL_INSTALL.md)"));
+      return withPortableRootOwnership([this.kotorDirectory], () => this.restorePhysical(sessionId, checkpointId, onProgress));
+    }
+    return this.restoreOwned(sessionId, checkpointId, onProgress);
+  }
+
+  /**
+   * Opt-in physical restore: refuse when an earlier checkpoint's baseline is
+   * unknown, persist a restore intent, write the files, then clear the intent
+   * only if the on-disk hash of every tracked path equals the checkpoint's.
+   * Any failure leaves the intent pending (later sessions then refuse to start).
+   * Directories are not tracked, so emptied directories may remain.
+   */
+  private async restorePhysical(sessionId: string, checkpointId: string, onProgress?: RestoreProgress): Promise<void> {
+    const stored = await this.getSession(sessionId);
+    const target = this.findCheckpoint(stored, checkpointId);
+    const unverified = (stored.unverifiedBaselineAt ?? []).filter((index) => index > target.index);
+    if (unverified.length) {
+      throw new CheckpointError(`Physical restore to checkpoint ${target.index} refused: checkpoint ${unverified[0]} modified paths (patcher/external program) whose pre-mutation content was never captured`);
+    }
+    const intent = await this.beginRestoreIntentOwned(sessionId, checkpointId, true);
+    await this.restoreOwned(sessionId, checkpointId, onProgress, true);
+    await this.acknowledgeRestore(sessionId, intent.operationId, intent.targetStateSha256);
+  }
+
+  private restoreOwned(sessionId: string, checkpointId: string, onProgress?: RestoreProgress, duringRestore = false): Promise<void> {
     return this.withLock(sessionId, async () => {
-      const state = await this.computeState(sessionId, this.findCheckpoint(await this.getSession(sessionId), checkpointId).index);
+      const state = await this.computeState(sessionId, this.findCheckpoint(await this.getSession(sessionId), checkpointId).index, duringRestore);
       const paths = [...state.keys()].sort();
       // Reject incomplete/corrupt snapshots before changing even the virtual
       // destination. Recheck on materialization; this is not an OS snapshot.

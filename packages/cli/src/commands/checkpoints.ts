@@ -1,6 +1,6 @@
 import { join, resolve as resolvePath } from "node:path";
 import type { Command } from "commander";
-import { CheckpointStore, RealFileSystem, loadSettings } from "@modsync/core";
+import { CheckpointStore, RealFileSystem, loadSettings, physicalInstallOptIn } from "@modsync/core";
 import { CliError, formatDuration } from "./shared.js";
 
 interface CheckpointFlags {
@@ -8,6 +8,7 @@ interface CheckpointFlags {
   root?: string;
   settings?: string;
   json?: boolean;
+  ciPhysicalInstall?: boolean;
 }
 
 async function storeFromFlags(flags: CheckpointFlags): Promise<CheckpointStore> {
@@ -15,7 +16,7 @@ async function storeFromFlags(flags: CheckpointFlags): Promise<CheckpointStore> 
   const kotor = flags.kotor ? resolvePath(flags.kotor) : settings.kotorDirectory;
   if (!kotor) throw new CliError("KOTOR directory is not set: pass --kotor <dir>");
   const root = flags.root ? resolvePath(flags.root) : settings.checkpointDirectory?.trim() || join(kotor, ".modsync", "checkpoints");
-  return new CheckpointStore({ rootDir: root, kotorDirectory: kotor, fs: new RealFileSystem() });
+  return new CheckpointStore({ rootDir: root, kotorDirectory: kotor, fs: new RealFileSystem(), physicalRestore: physicalInstallOptIn(flags.ciPhysicalInstall) });
 }
 
 export async function runCheckpointsList(flags: CheckpointFlags): Promise<number> {
@@ -65,7 +66,8 @@ export function registerCheckpoints(program: Command): void {
     c
       .option("--kotor <dir>", "KOTOR installation directory")
       .option("--root <dir>", "checkpoint store directory (default <kotor>/.modsync/checkpoints)")
-      .option("--settings <path>", "settings file");
+      .option("--settings <path>", "settings file")
+      .option("--ci-physical-install", "CI ONLY: allow a physical restore guarded by a portable lockfile (or set MODSYNC_CI_PHYSICAL_INSTALL=1)");
   addFlags(cmd.command("list").description("list checkpoint sessions").option("--json", "JSON output")).action(async (flags: CheckpointFlags) => {
     process.exitCode = await runCheckpointsList(flags);
   });

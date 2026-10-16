@@ -15,3 +15,5 @@ Linux production compilation and refusal against the real live authoring session
 Physical installation stays disabled. Durable recovery acknowledgement, external-process quiescence, root-bound pending state, directory rollback, new lock publication, and integration across every writer still require implementation.
 
 Primary contracts: [Node-API](https://nodejs.org/api/n-api.html), [LockFileEx](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-lockfileex), and the pinned Rust `fs2` 0.4.3 source.
+
+A separate, explicitly opt-in, CI-only portable lockfile path exists for plain directories without this addon; see `docs/PHYSICAL_INSTALL.md`. It does not use this addon and does not change the default refusal.

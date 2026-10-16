@@ -11,6 +11,7 @@ import { predictRustAuthoringGuide } from "../authoring/predictionRuntime.js";
 import type { openArchive } from "../archive/index.js";
 import type { CheckpointStore } from "../checkpoints/store.js";
 import { RealFileSystem } from "../fs/realFileSystem.js";
+import { acquirePortableRootOwnership, type PhysicalInstallOptIn, type PortableRootOwnership } from "../fs/portableLock.js";
 import { VirtualFileSystem } from "../fs/virtualFileSystem.js";
 import { NullLogger } from "../logging/logger.js";
 import type {
@@ -57,6 +58,12 @@ export interface RunOptions {
   modGuids?: Guid[];
   /** Simulate instead of touching the disk. */
   dryRun?: boolean;
+  /**
+   * CI-only explicit opt-in to a physical (non-virtual) install guarded by the
+   * portable lockfile instead of native OS ownership. Without it, every
+   * non-dry-run is refused. Cannot be combined with `dryRun`.
+   */
+  physical?: PhysicalInstallOptIn;
   /** Immutable saved inputs and optional authored instruction boundary for canonical raw-guide prediction. */
   authoringPrediction?: { sessionDirectory?: string; componentGuid?: Guid; instructionCount?: number };
 }
@@ -170,6 +177,7 @@ export class Installer extends EventEmitter {
     const startedAt = new Date().toISOString();
     const summary: InstallSummary = { startedAt, finishedAt: startedAt, mods: [], succeeded: 0, failed: 0, skipped: 0 };
     this.lastSummary = summary;
+    let ownership: PortableRootOwnership | undefined;
 
     try {
       if (this.file.rustAuthoringGuide) {
@@ -224,8 +232,16 @@ export class Installer extends EventEmitter {
           }),
       });
 
-      if (!ctx.dryRun || !ctx.fs.isVirtual) {
-        throw new Error("Independent TypeScript physical installation is unavailable: exclusive OS writer ownership and verified recovery acknowledgement are not implemented. Use a virtual filesystem for prediction or the configured authoritative Rust workflow.");
+      if (opts.physical) {
+        if (opts.dryRun || opts.physical.ownership !== "portable-lockfile") {
+          throw new Error('Physical install opt-in requires a real run (not dryRun) with ownership "portable-lockfile"');
+        }
+        if (ctx.fs.isVirtual) throw new Error("Physical install opt-in requires a non-virtual filesystem");
+        if (!this.deps.checkpoints) logger.warn("CI-only physical install without a checkpoint store: a failed step cannot be restored");
+        logger.warn("CI-only physical install: portable lockfile ownership excludes only other ModSync processes; native OS ownership and verified recovery are not in effect");
+        ownership = await acquirePortableRootOwnership([ctx.dirs.modDirectory, ctx.dirs.kotorDirectory]);
+      } else if (!ctx.dryRun || !ctx.fs.isVirtual) {
+        throw new Error("Independent TypeScript physical installation is unavailable: exclusive OS writer ownership and verified recovery acknowledgement are not implemented. Use a virtual filesystem for prediction or the configured authoritative Rust workflow. CI-only explicit opt-in: portable lockfile ownership (see docs/PHYSICAL_INSTALL.md).");
       }
 
       let session: CheckpointSession | undefined;
@@ -332,6 +348,13 @@ export class Installer extends EventEmitter {
       this.emitEvent({ type: "install-error", message });
       return summary;
     } finally {
+      try {
+        await ownership?.release();
+      } catch (err) {
+        const message = `portable install lock release failed: ${err instanceof Error ? err.message : String(err)}`;
+        summary.error = summary.error ? `${summary.error}; ${message}` : message;
+        logger.error(message);
+      }
       this.currentModGuid = undefined;
       this.pending = undefined;
       this.active = false;
@@ -385,6 +408,7 @@ export class Installer extends EventEmitter {
           modGuid: mod.guid,
           instructionGuid: instruction.guid,
           touched: [...new Set([...predicted,...result.touched])],
+          unpredicted: result.touched.filter((path) => !predicted.some((known) => path === known || path.startsWith(`${known}/`))),
         });
         result.checkpointId = meta.id;
         if(!checkpointOperationId)throw new Error("Checkpoint operation identity is unavailable");

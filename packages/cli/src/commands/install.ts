@@ -9,6 +9,7 @@ import {
   Installer,
   RealFileSystem,
   createLogger,
+  physicalInstallOptIn,
   createPatcher,
   type InstallEvent,
   type InstallSummary,
@@ -30,6 +31,7 @@ export interface InstallFlags extends DirectoryFlags {
   yes?: boolean;
   choice?: string[];
   checkpoints?: boolean;
+  ciPhysicalInstall?: boolean;
   json?: boolean;
   verbose?: boolean;
   logFile?: string;
@@ -114,6 +116,7 @@ export async function runInstall(filePath: string, flags: InstallFlags, run: Run
     file: flags.logFile,
     sink: flags.verbose ? (line) => out(line) : undefined,
   });
+  const physical = run.dryRun ? undefined : physicalInstallOptIn(flags.ciPhysicalInstall);
   const fs = new RealFileSystem();
   const useCheckpoints = !run.dryRun && (flags.checkpoints ?? settings.createCheckpoints);
   const checkpoints = useCheckpoints
@@ -121,6 +124,7 @@ export async function runInstall(filePath: string, flags: InstallFlags, run: Run
         rootDir: settings.checkpointDirectory?.trim() || join(settings.kotorDirectory, ".modsync", "checkpoints"),
         kotorDirectory: settings.kotorDirectory,
         fs,
+        physicalRestore: physical,
       })
     : undefined;
   const installer = new Installer(file, settings, { fs, logger, patcher: createPatcher(settings, logger), checkpoints });
@@ -140,6 +144,7 @@ export async function runInstall(filePath: string, flags: InstallFlags, run: Run
   out(`  mods:  ${settings.modDirectory}`);
   out(`  kotor: ${settings.kotorDirectory}`);
   if (checkpoints) out(`  checkpoints: ${checkpoints.rootDir}`);
+  if (physical) out("  CI-only physical install: portable lockfile ownership (not native OS ownership); see docs/PHYSICAL_INSTALL.md");
 
   let rl: ReturnType<typeof createInterface> | undefined;
   const ask =
@@ -219,7 +224,7 @@ export async function runInstall(filePath: string, flags: InstallFlags, run: Run
   };
   process.once("SIGINT", onSigint);
   try {
-    summary = await installer.run({ phase, dryRun: run.dryRun });
+    summary = await installer.run({ phase, dryRun: run.dryRun, physical });
   } finally {
     process.off("SIGINT", onSigint);
     rl?.close();
@@ -256,7 +261,9 @@ function addInstallOptions(cmd: Command): Command {
 
 export function registerInstall(program: Command): void {
   const install = program.command("install <file>").description("install the selected mods into the KOTOR directory");
-  addInstallOptions(install).option("--no-checkpoints", "do not record checkpoints");
+  addInstallOptions(install)
+    .option("--no-checkpoints", "do not record checkpoints")
+    .option("--ci-physical-install", "CI ONLY: allow a physical install guarded by a portable lockfile instead of native OS ownership (or set MODSYNC_CI_PHYSICAL_INSTALL=1)");
   install.action(async (file: string, flags: InstallFlags) => {
     process.exitCode = await runInstall(file, flags, { dryRun: false });
   });
