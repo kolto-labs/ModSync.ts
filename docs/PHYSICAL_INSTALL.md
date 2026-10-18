@@ -24,6 +24,16 @@ original errors. The opt-in is ignored for `--dry-run` and rejected by
 `run({ physical: { ownership: "portable-lockfile" } })`, and pass the same
 value as `physicalRestore` to `CheckpointStore`.
 
+The web GUI server (`packages/server`) honours only the environment variable,
+never a request parameter: with `MODSYNC_CI_PHYSICAL_INSTALL=1` in the server
+process, `POST /api/install` runs with the same `physical` opt-in as the CLI,
+its checkpoint store is built with `physicalRestore`, `GET
+/api/checkpoints/capabilities` reports `physicalRestore: true`, and `POST
+/api/checkpoints/:session/:id/restore` performs the verified physical restore
+(refused while an install is running or for a session recorded for a different
+game directory). Without the variable the server keeps refusing exactly as
+before.
+
 Example for `tools/modsync-ci/ports.py`:
 
 ```
@@ -69,7 +79,6 @@ Non-guarantees:
   patcher step that touched files outside predicted paths is refused ("never
   captured").
 - No wine fallback for Windows executables.
-- The server and GUI routes still report `physicalRestore: false`.
 
 ## Failure protocol
 
