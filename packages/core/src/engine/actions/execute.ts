@@ -2,12 +2,15 @@
  * Execute: run a program shipped with a mod. Arguments are split shell-style
  * (double/single quotes, backslash escapes). The working directory is the
  * executable's folder. A dry run only checks that the executable exists.
+ * On a non-Windows host a Windows executable (MZ header) runs through wine,
+ * with arguments into the game or mod directory rewritten to wine paths; see
+ * `planLaunch`. Native programs are spawned unchanged.
  */
 
 import { parentPath, toNative } from "../../fs/paths.js";
 import type { Instruction, InstructionResult, ModComponent, ModOption } from "../../model/types.js";
 import type { InstallContext } from "../context.js";
-import { runProcess } from "../patcherPort.js";
+import { WineUnavailableError, planLaunch } from "../windowsExec.js";
 import { ActionError, resolveSources, runAction } from "./common.js";
 
 /** Split a command line into arguments: whitespace separated, quotes group, backslash escapes. */
@@ -74,10 +77,20 @@ export async function executeExecute(
       return;
     }
     const cwd = parentPath(exe);
+    const host = ctx.processHost;
+    let launch;
+    try {
+      launch = await planLaunch(host, toNative(exe), args, [ctx.dirs.kotorDirectory, ctx.dirs.modDirectory]);
+    } catch (err) {
+      if (err instanceof WineUnavailableError) throw new ActionError("ExecuteError", `cannot run "${exe}": ${err.message}`);
+      throw err;
+    }
+    if (launch.viaWine) ctx.logger.info(`execute: via wine: ${launch.command} ${launch.args.join(" ")}`);
     let outcome;
     try {
-      outcome = await runProcess(toNative(exe), args, {
+      outcome = await host.run(launch.command, launch.args, {
         cwd: toNative(cwd),
+        ...(launch.env ? { env: launch.env } : {}),
         signal: ctx.signal,
         onLine: (line) => ctx.logger.info(`[${mod.name}] ${line}`),
       });

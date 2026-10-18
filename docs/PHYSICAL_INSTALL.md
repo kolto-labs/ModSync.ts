@@ -68,7 +68,14 @@ Non-guarantees:
   recovery pending and cannot be rolled back from checkpoints; a restore past a
   patcher step that touched files outside predicted paths is refused ("never
   captured").
-- No wine fallback for Windows executables.
+- `Execute` on a non-Windows host runs a Windows executable (MZ header) through
+  `wine` (`wine64` as a fallback), inside `xvfb-run` when no display is set and
+  it is installed. Arguments that point into the game or mod directory are
+  rewritten to wine `Z:` paths; `WINEPREFIX` is inherited and `WINEDEBUG`
+  defaults to `-all`. A missing wine fails the step with a clear error. ELF
+  binaries and scripts, and every program on Windows, are spawned directly. The
+  touched-path bookkeeping above is unchanged, and none of this has run against
+  a real wine in the unit tests (they stub the process host).
 - The server and GUI routes still report `physicalRestore: false`.
 
 ## Failure protocol

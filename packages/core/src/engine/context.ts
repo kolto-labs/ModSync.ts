@@ -14,6 +14,7 @@ import type { Directories, Logger, TelemetrySink, UserPrompt, UserPromptAnswer, 
 import type { FileSystemPort } from "../ports/filesystem.js";
 import { createPatcher, type PatcherPort } from "./patcherPort.js";
 import type { SelectionSet } from "./selection.js";
+import { createProcessHost, type ProcessHost } from "./windowsExec.js";
 
 export type PromptHandler = (prompt: UserPrompt) => Promise<UserPromptAnswer>;
 
@@ -28,6 +29,8 @@ export interface InstallContext {
   dryRun: boolean;
   openArchive: typeof openArchive;
   patcher: PatcherPort;
+  /** Host seam for Execute (platform, PATH lookup, spawn); defaults to the real process host. */
+  processHost: ProcessHost;
   telemetry?: TelemetrySink;
   signal?: AbortSignal;
 }
@@ -41,6 +44,7 @@ export interface CreateInstallContextOptions {
   dryRun?: boolean;
   openArchive?: typeof openArchive;
   patcher?: PatcherPort;
+  processHost?: ProcessHost;
   telemetry?: TelemetrySink;
   signal?: AbortSignal;
 }
@@ -70,6 +74,7 @@ export function createInstallContext(opts: CreateInstallContextOptions): Install
     dryRun: opts.dryRun ?? false,
     openArchive: opts.openArchive ?? openArchive,
     patcher: opts.patcher ?? createPatcher(opts.settings, logger),
+    processHost: opts.processHost ?? createProcessHost(),
     telemetry: opts.telemetry,
     signal: opts.signal,
   };
