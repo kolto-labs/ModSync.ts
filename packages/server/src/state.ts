@@ -25,12 +25,14 @@ import {
   createPatcher,
   defaultSettingsPath,
   loadSettings,
+  physicalInstallOptIn,
   saveSettings,
   type DownloadItem as CoreDownloadItem,
   type Guid,
   type InstallSummary,
   type InstructionFile,
   type ModSyncLogger,
+  type PhysicalInstallOptIn,
   type UserPrompt,
   type UserPromptAnswer,
   type UserSettings,
@@ -261,8 +263,19 @@ export class AppState {
     return this.settings.checkpointDirectory?.trim() || join(this.settings.kotorDirectory, ".modsync", "checkpoints");
   }
 
+  /** CI-only physical opt-in, read from `MODSYNC_CI_PHYSICAL_INSTALL=1` on every call; undefined unless set. */
+  physicalInstallOptIn(): PhysicalInstallOptIn | undefined {
+    return physicalInstallOptIn();
+  }
+
   createCheckpointStore(kotorDirectory = this.settings.kotorDirectory): CheckpointStore {
-    return new CheckpointStore({ rootDir: this.checkpointRoot(), kotorDirectory, fs: new RealFileSystem() });
+    const physicalRestore = this.physicalInstallOptIn();
+    return new CheckpointStore({
+      rootDir: this.checkpointRoot(),
+      kotorDirectory,
+      fs: new RealFileSystem(),
+      ...(physicalRestore ? { physicalRestore } : {}),
+    });
   }
 
   // -------------------------------------------------------------------
@@ -291,6 +304,7 @@ export class AppState {
     const sessionId = randomUUID();
     const fs = new RealFileSystem();
     const logger = this.logger.child("install");
+    const physical = this.physicalInstallOptIn();
     const installer = new Installer(file, this.settings, {
       fs,
       logger,
@@ -334,7 +348,7 @@ export class AppState {
     });
 
     this.installTask = installer
-      .run(opts)
+      .run(physical ? { ...opts, physical } : opts)
       .then((summary) => {
         this.lastSummary = summary;
       })
