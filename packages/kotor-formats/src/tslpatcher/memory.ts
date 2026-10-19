@@ -17,12 +17,31 @@ export class PatcherTokenError extends Error {
 export class PatcherMemory {
   readonly strref = new Map<number, number>();
   readonly twoda = new Map<number, string>();
+  /** 2DAMEMORY tokens that hold a GFF field path pointer (stored via `!FieldPath`), not a plain string. */
+  private readonly fieldPaths = new Set<number>();
 
   setStrRef(token: number, value: number): void {
     this.strref.set(token, value);
   }
   set2da(token: number, value: string): void {
     this.twoda.set(token, value);
+    this.fieldPaths.delete(token);
+  }
+  /** Store a GFF field path pointer (`2DAMEMORY<N>=!FieldPath`). */
+  setFieldPath(token: number, path: string): void {
+    this.twoda.set(token, path);
+    this.fieldPaths.add(token);
+  }
+  isFieldPath(token: number): boolean {
+    return this.fieldPaths.has(token);
+  }
+  /** `2DAMEMORY<dest>=2DAMEMORY<source>` without a pointer destination: copy the value and its pointer-ness. */
+  copy2da(dest: number, source: number): void {
+    const value = this.get2da(source);
+    const pointer = this.fieldPaths.has(source);
+    this.twoda.set(dest, value);
+    if (pointer) this.fieldPaths.add(dest);
+    else this.fieldPaths.delete(dest);
   }
   getStrRef(token: number): number {
     const v = this.strref.get(token);

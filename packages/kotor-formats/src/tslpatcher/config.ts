@@ -114,7 +114,12 @@ export interface RowTarget {
   value: PatcherValue;
 }
 
-export type TwoDAStoreSource = { kind: "rowIndex" } | { kind: "rowLabel" } | { kind: "column"; column: string };
+export type TwoDAStoreSource =
+  | { kind: "rowIndex" }
+  | { kind: "rowLabel" }
+  | { kind: "column"; column: string }
+  /** `2DAMEMORY<N>=2DAMEMORY<M>` / `=StrRef<M>`: copy the value of another token */
+  | { kind: "value"; value: PatcherValue };
 export interface TwoDAStore {
   pool: "2damemory" | "strref";
   token: number;
@@ -191,13 +196,27 @@ export interface GffAddField {
   storeListIndex: number[];
   /** 2DAMEMORY<N>=!FieldPath */
   storeFieldPath: number[];
+  /** TypeId=ListIndex: the new struct's type id is its index in the list */
+  typeIdFromListIndex: boolean;
+  /** 2DAMEMORY<N>=2DAMEMORY<M>, applied after the field exists (before children) */
+  copyMemory: { token: number; source: number }[];
   children: GffAddField[];
 }
 export interface GffStorePath {
   kind: "storePath";
   token: number;
 }
-export type GffModifier = GffModifyField | GffAddField | GffStorePath;
+/**
+ * `2DAMEMORY<N>=2DAMEMORY<M>` directly in a GFF file section. When token N holds a stored field path the
+ * value of token M (dereferenced if it is a field path too) is written into that field; otherwise token N
+ * becomes a copy of token M.
+ */
+export interface GffMemoryAssign {
+  kind: "memoryAssign";
+  token: number;
+  source: number;
+}
+export type GffModifier = GffModifyField | GffAddField | GffStorePath | GffMemoryAssign;
 
 export interface GffFileConfig extends PatchFileCommon {
   modifiers: GffModifier[];
@@ -268,6 +287,12 @@ function parseIntStrict(raw: string, section: string, key: string): number {
   throw new PatcherConfigError(`expected an integer, got "${raw}"`, section, key);
 }
 
+/** TSLPatcher also writes TLK indices in Replace/Append sections as `StrRef<N>`. */
+function stripStrRefPrefix(raw: string): string {
+  const v = raw.trim();
+  return /^strref\d+$/i.test(v) ? v.slice(6) : v;
+}
+
 function parseOverrideType(raw: string | undefined, section: string): OverrideType {
   if (raw === undefined) return "ignore";
   const v = raw.trim().toLowerCase();
@@ -307,15 +332,19 @@ function isBang(key: string): boolean {
   return key.startsWith("!");
 }
 
-/** Entries of a file-list section (File<N>/Replace<N>) in numeric order. */
+const FILE_ENTRY_PREFIXES = ["File", "Replace", "Table"] as const;
+
+/**
+ * Entries of a file-list section in numeric order. TSLPatcher/HoloPatcher treat the key as an opaque
+ * identifier (`File<N>`, `Table<N>`, `Replace<N>`, ...) and only look at the value (the file name); a key
+ * starting with `Replace` marks a replacing entry.
+ */
 function fileListEntries(section: IniSection): (IniEntry & { replace: boolean })[] {
   const out: (IniEntry & { replace: boolean })[] = [];
-  for (const e of orderByNumericSuffix(section.entries, ["File", "Replace"])) {
+  for (const e of orderByNumericSuffix(section.entries, FILE_ENTRY_PREFIXES)) {
     if (isBang(e.key)) continue;
-    if (numericSuffix(e.key, "File") !== undefined) out.push({ ...e, replace: false });
-    else if (numericSuffix(e.key, "Replace") !== undefined) out.push({ ...e, replace: true });
-    else throw new PatcherConfigError(`unexpected key "${e.key}" (expected File<N> or Replace<N>)`, section.name, e.key);
     if (e.value.trim() === "") throw new PatcherConfigError("empty file name", section.name, e.key);
+    out.push({ ...e, replace: e.key.toLowerCase().startsWith("replace") });
   }
   return out;
 }
@@ -449,8 +478,8 @@ function parseTlkList(ini: IniDocument): TlkListConfig {
       const sourceFile = sub.get("!SourceFile")?.trim() || sectionName;
       for (const pair of sub.entries) {
         if (isBang(pair.key)) continue;
-        const left = parseIntStrict(pair.key, sub.name, pair.key);
-        const right = parseIntStrict(pair.value, sub.name, pair.key);
+        const left = parseIntStrict(stripStrRefPrefix(pair.key), sub.name, pair.key);
+        const right = parseIntStrict(stripStrRefPrefix(pair.value), sub.name, pair.key);
         if (isReplace) cfg.modifiers.push({ kind: "replace", dialogIndex: left, sourceIndex: right, sourceFile });
         else cfg.modifiers.push({ kind: "append", token: left, sourceIndex: right, sourceFile });
       }
@@ -473,10 +502,11 @@ function parseInstallList(ini: IniDocument): InstallFolderConfig[] {
   const out: InstallFolderConfig[] = [];
   const s = ini.getSection("InstallList");
   if (!s) return out;
-  for (const e of s.numbered("install_folder")) {
+  for (const e of orderByNumericSuffix(s.entries, ["install_folder"])) {
+    if (isBang(e.key)) continue;
     // TSLPatcher/HoloPatcher: the section is named by the KEY ([install_folderN]) and the value is the
     // destination folder (or archive path) relative to the game dir. A section named after the value is
-    // accepted as a fallback.
+    // accepted as a fallback. The key is an opaque identifier; any key naming a section is accepted.
     const folderSection = ini.getSection(e.key) ?? ini.getSection(e.value.trim());
     if (!folderSection) throw new PatcherConfigError(`references section [${e.key}] which does not exist`, s.name, e.key);
     const folder: InstallFolderConfig = { destination: normalizeDest(e.value, "Override"), files: [] };
@@ -491,10 +521,6 @@ function parseInstallList(ini: IniDocument): InstallFolderConfig[] {
     }
     out.push(folder);
   }
-  for (const e of s.entries) {
-    if (isBang(e.key) || numericSuffix(e.key, "install_folder") !== undefined) continue;
-    throw new PatcherConfigError(`unexpected key "${e.key}" (expected install_folder<N>)`, s.name, e.key);
-  }
   return out;
 }
 
@@ -508,7 +534,14 @@ function parseStore(key: string, value: string, section: string): TwoDAStore | u
   const t = parseToken(key);
   if (!t) return undefined;
   const v = value.trim().toLowerCase();
-  const source: TwoDAStoreSource = v === "rowindex" ? { kind: "rowIndex" } : v === "rowlabel" ? { kind: "rowLabel" } : { kind: "column", column: value.trim() };
+  const tokenSource = parseToken(value);
+  const source: TwoDAStoreSource = tokenSource
+    ? { kind: "value", value: tokenSource }
+    : v === "rowindex"
+      ? { kind: "rowIndex" }
+      : v === "rowlabel"
+        ? { kind: "rowLabel" }
+        : { kind: "column", column: value.trim() };
   if (source.kind === "column" && source.column === "") throw new PatcherConfigError("memory store needs RowIndex, RowLabel or a column name", section, key);
   return { pool: t.kind, token: t.token, source };
 }
@@ -589,12 +622,9 @@ function parse2daList(ini: IniDocument): TwoDAFileConfig[] {
   const out: TwoDAFileConfig[] = [];
   const s = ini.getSection("2DAList");
   if (!s) return out;
-  const tables = orderByNumericSuffix(s.entries, ["Table", "Replace"]).filter((e) => !isBang(e.key));
-  for (const e of tables) {
-    const replace = numericSuffix(e.key, "Replace") !== undefined;
-    if (!replace && numericSuffix(e.key, "Table") === undefined) throw new PatcherConfigError(`unexpected key "${e.key}" (expected Table<N>)`, s.name, e.key);
+  for (const e of fileListEntries(s)) {
     const filename = e.value.trim();
-    const { common, section } = readCommon(ini, filename, replace, s.name, e.key, true);
+    const { common, section } = readCommon(ini, filename, e.replace, s.name, e.key, true);
     const file: TwoDAFileConfig = { ...common, modifiers: [] };
     const ordered = orderByNumericSuffix(section!.entries, ["AddRow", "ChangeRow", "CopyRow", "AddColumn"]);
     for (const m of ordered) {
@@ -630,6 +660,8 @@ function parseAddField(ini: IniDocument, section: IniSection, depth: number): Gf
     typeId: 0,
     storeListIndex: [],
     storeFieldPath: [],
+    copyMemory: [],
+    typeIdFromListIndex: false,
     children: [],
   };
   const loc: GffLocStringSpec = { substrings: new Map() };
@@ -637,7 +669,8 @@ function parseAddField(ini: IniDocument, section: IniSection, depth: number): Gf
     const k = e.key.toLowerCase();
     if (k === "fieldtype" || k === "path" || k === "label") continue;
     if (k === "typeid") {
-      add.typeId = parseIntStrict(e.value, section.name, e.key);
+      if (e.value.trim().toLowerCase() === "listindex") add.typeIdFromListIndex = true;
+      else add.typeId = parseIntStrict(e.value, section.name, e.key);
       continue;
     }
     if (k === "value") {
@@ -659,7 +692,11 @@ function parseAddField(ini: IniDocument, section: IniSection, depth: number): Gf
       const v = e.value.trim().toLowerCase();
       if (v === "listindex") add.storeListIndex.push(t.token);
       else if (v === "!fieldpath") add.storeFieldPath.push(t.token);
-      else throw new PatcherConfigError(`2DAMEMORY store in AddField must be ListIndex or !FieldPath, got "${e.value}"`, section.name, e.key);
+      else {
+        const src = parseToken(e.value);
+        if (src?.kind !== "2damemory") throw new PatcherConfigError(`2DAMEMORY assignment in AddField must be ListIndex, !FieldPath or 2DAMEMORY<M>, got "${e.value}"`, section.name, e.key);
+        add.copyMemory.push({ token: t.token, source: src.token });
+      }
       continue;
     }
     if (isBang(e.key)) continue;
@@ -705,12 +742,20 @@ function parseGffList(ini: IniDocument): GffFileConfig[] {
         continue;
       }
       const t = parseToken(m.key);
-      if (t) {
-        if (t.kind === "2damemory" && m.value.trim().toLowerCase() === "!fieldpath") {
+      if (t?.kind === "2damemory") {
+        const v = m.value.trim();
+        if (v.toLowerCase() === "!fieldpath") {
           file.modifiers.push({ kind: "storePath", token: t.token });
           continue;
         }
-        throw new PatcherConfigError(`unexpected memory key "${m.key}=${m.value}" in GFF section (only 2DAMEMORY<N>=!FieldPath is allowed here)`, section!.name, m.key);
+        const src = parseToken(v);
+        if (src?.kind === "2damemory") {
+          file.modifiers.push({ kind: "memoryAssign", token: t.token, source: src.token });
+          continue;
+        }
+        // otherwise `2DAMEMORY<N>=<value>` writes <value> to the field whose path is stored in token N
+      } else if (t?.kind === "strref") {
+        throw new PatcherConfigError(`unexpected key "${m.key}" in GFF section (StrRef<N> cannot be a field path)`, section!.name, m.key);
       }
       const { path, part } = parseGffModifyKey(m.key);
       if (path === "") throw new PatcherConfigError("empty field path", section!.name, m.key);
