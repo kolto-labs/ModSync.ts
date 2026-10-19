@@ -43,7 +43,48 @@ describe("erf/rim", () => {
     expect(e.remove("area", 2012)).toBe(true);
     expect(e.remove("area", 2012)).toBe(false);
     expect(e.has("area", 2012)).toBe(false);
-    expect(() => writeErf(new Encapsulated("ERF ", [{ resref: "seventeen_chars__", type: 1, data: new Uint8Array(0) }]))).toThrow(/16 bytes/);
+  });
+  it("truncates over-long resrefs to 16 bytes with a warning, preserving case", () => {
+    const longName = "a_very_Long_resource_name_x";
+    for (const kind of ["MOD ", "RIM "] as const) {
+      const e = new Encapsulated(kind, [{ resref: longName, type: ResourceTypes.ncs, data: Uint8Array.from([5]) }]);
+      const warnings: string[] = [];
+      const bytes = writeEncapsulated(e, { warn: (m) => warnings.push(m) });
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain(longName);
+      expect(warnings[0]).toContain("a_very_Long_reso");
+      const back = readEncapsulated(bytes);
+      expect(back.resources.map((r) => r.resref)).toEqual(["a_very_Long_reso"]);
+      expect(Array.from(back.get("A_VERY_LONG_RESO", ResourceTypes.ncs)!.data)).toEqual([5]);
+    }
+    const rim = new Encapsulated("RIM ", [{ resref: longName, type: 1, data: new Uint8Array(0) }]);
+    const rimWarnings: string[] = [];
+    writeRim(rim, { warn: (m) => rimWarnings.push(m) });
+    expect(rimWarnings).toHaveLength(1);
+  });
+  it("does not warn when resrefs fit in 16 bytes", () => {
+    const warnings: string[] = [];
+    writeErf(sample("MOD "), { warn: (m) => warnings.push(m) });
+    expect(warnings).toEqual([]);
+  });
+  it("fails when truncation makes two resources collide", () => {
+    const first = "a_very_long_resource_name_x";
+    const second = "A_VERY_LONG_RESOURCE_NAME_y";
+    const collide = new Encapsulated("ERF ", [
+      { resref: first, type: 1, data: new Uint8Array(0) },
+      { resref: second, type: 1, data: new Uint8Array(0) },
+    ]);
+    expect(() => writeErf(collide, { warn: () => {} })).toThrow(new RegExp(`${second}.*${first}`));
+    const exact = new Encapsulated("RIM ", [
+      { resref: "a_very_long_reso", type: 1, data: new Uint8Array(0) },
+      { resref: first, type: 1, data: new Uint8Array(0) },
+    ]);
+    expect(() => writeRim(exact, { warn: () => {} })).toThrow(/a_very_long_reso/);
+    const differentType = new Encapsulated("ERF ", [
+      { resref: first, type: 1, data: new Uint8Array(0) },
+      { resref: second, type: 2, data: new Uint8Array(0) },
+    ]);
+    expect(() => writeErf(differentType, { warn: () => {} })).not.toThrow();
   });
   it("detects archive paths", () => {
     expect(isEncapsulatedPath("Modules\\danm13.mod")).toBe(true);

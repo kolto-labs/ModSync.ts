@@ -2,7 +2,7 @@
  * ERF/MOD/SAV/HAK (V1.0) and RIM (V1.0) reader/writer.
  * See docs/KOTOR_FORMATS.md section 5.
  */
-import { BinaryReader, BinaryWriter, encodeCp1252 } from "./binary.js";
+import { BinaryReader, BinaryWriter, decodeCp1252, encodeCp1252 } from "./binary.js";
 
 export class ErfError extends Error {
   constructor(message: string) {
@@ -67,10 +67,29 @@ export class Encapsulated {
 const ERF_HEADER = 160;
 const RIM_HEADER = 120;
 
-function checkResref(resref: string): Uint8Array {
-  const enc = encodeCp1252(resref);
-  if (enc.length > 16) throw new ErfError(`resref "${resref}" exceeds 16 bytes`);
-  return enc;
+const RESREF_MAX = 16;
+
+/**
+ * Aurora resrefs are 16 bytes. Like TSLPatcher, names longer than that are truncated
+ * (case preserved) with a warning rather than rejected; a truncation that makes two
+ * resources of the same type share a name is a hard error.
+ */
+function normalizeResrefs(enc: Encapsulated, warn: ((message: string) => void) | undefined): string[] {
+  const report = warn ?? ((message: string) => console.warn(message));
+  const seen = new Map<string, { original: string; truncated: boolean }>();
+  return enc.resources.map((res) => {
+    const bytes = encodeCp1252(res.resref);
+    const truncated = bytes.length > RESREF_MAX;
+    const name = truncated ? decodeCp1252(bytes.subarray(0, RESREF_MAX)) : res.resref;
+    const key = `${res.type}:${name.toLowerCase()}`;
+    const prior = seen.get(key);
+    if (prior && (prior.truncated || truncated)) {
+      throw new ErfError(`resref "${res.resref}" and "${prior.original}" both resolve to "${name}" (type ${res.type}) after truncation to ${RESREF_MAX} bytes`);
+    }
+    if (!prior) seen.set(key, { original: res.resref, truncated });
+    if (truncated) report(`resref "${res.resref}" exceeds ${RESREF_MAX} bytes; truncated to "${name}" in ${enc.fileType.trim()} archive`);
+    return name;
+  });
 }
 
 export function readErf(bytes: Uint8Array): Encapsulated {
@@ -109,6 +128,8 @@ export interface ErfWriteOptions {
   buildYear?: number;
   buildDay?: number;
   descriptionStrRef?: number;
+  /** receives a diagnostic for each resref truncated to 16 bytes; defaults to console.warn */
+  warn?: (message: string) => void;
 }
 
 export function writeErf(enc: Encapsulated, opts: ErfWriteOptions = {}): Uint8Array {
@@ -128,9 +149,9 @@ export function writeErf(enc: Encapsulated, opts: ErfWriteOptions = {}): Uint8Ar
   w.u32(0).u32(0).u32(count).u32(ERF_HEADER).u32(keyOffset).u32(resOffset);
   w.u32(year).u32(day).u32(opts.descriptionStrRef ?? 0xffffffff);
   w.zeros(116);
+  const names = normalizeResrefs(enc, opts.warn);
   enc.resources.forEach((res, i) => {
-    checkResref(res.resref);
-    w.fixedString(res.resref, 16).u32(i).u16(res.type).u16(0);
+    w.fixedString(names[i]!, 16).u32(i).u16(res.type).u16(0);
   });
   let off = dataOffset;
   for (const res of enc.resources) {
@@ -166,7 +187,7 @@ export function readRim(bytes: Uint8Array): Encapsulated {
   return enc;
 }
 
-export function writeRim(enc: Encapsulated): Uint8Array {
+export function writeRim(enc: Encapsulated, opts: ErfWriteOptions = {}): Uint8Array {
   const count = enc.resources.length;
   const dataOffset = RIM_HEADER + 32 * count;
   let total = dataOffset;
@@ -174,9 +195,9 @@ export function writeRim(enc: Encapsulated): Uint8Array {
   const w = new BinaryWriter(total);
   w.string("RIM ").string("V1.0").u32(0).u32(count).u32(RIM_HEADER).zeros(100);
   let off = dataOffset;
+  const names = normalizeResrefs(enc, opts.warn);
   enc.resources.forEach((res, i) => {
-    checkResref(res.resref);
-    w.fixedString(res.resref, 16).u32(res.type).u32(i).u32(off).u32(res.data.length);
+    w.fixedString(names[i]!, 16).u32(res.type).u32(i).u32(off).u32(res.data.length);
     off += res.data.length;
   });
   for (const res of enc.resources) w.bytes(res.data);
@@ -192,7 +213,7 @@ export function readEncapsulated(bytes: Uint8Array): Encapsulated {
 
 /** Write an archive according to its `fileType`. */
 export function writeEncapsulated(enc: Encapsulated, opts?: ErfWriteOptions): Uint8Array {
-  return enc.fileType === "RIM " ? writeRim(enc) : writeErf(enc, opts);
+  return enc.fileType === "RIM " ? writeRim(enc, opts) : writeErf(enc, opts);
 }
 
 const ARCHIVE_TYPES: Record<string, EncapsulatedFileType> = { mod: "MOD ", erf: "ERF ", sav: "SAV ", hak: "HAK ", rim: "RIM " };
