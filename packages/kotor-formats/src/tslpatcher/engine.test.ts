@@ -481,6 +481,30 @@ describe("TslPatcher", () => {
       expect(log.filesWritten).toEqual([]);
     });
 
+    const TOKEN_INI = (assign: string): string =>
+      `[2DAList]\nTable0=table_a.2da\nTable1=spells.2da\n[table_a.2da]\nChangeRow0=row_fix\n[row_fix]\nRowIndex=0\nlabel=changed\n${assign}\n[spells.2da]\nChangeRow0=spell_fix\n[spell_fix]\nRowIndex=0\nname=2DAMEMORY1`;
+
+    it("dry run reports a token read as unverified when the step that assigns it was an unverified placeholder", async () => {
+      await fsp.writeFile(path.join(dataDir, "table_a.2da"), new Uint8Array(0));
+      const patcher = new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true });
+      const log = await patcher.apply(parseChangesIni(TOKEN_INI("2DAMEMORY1=RowIndex")));
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toHaveLength(2);
+      expect(log.unverified[0]).toMatch(/table_a\.2da.*zero-byte virtual placeholder/);
+      expect(log.unverified[1]).toMatch(/2DAList spells\.2da: 2DAMEMORY1 is assigned by an earlier step that could not be verified/);
+      expect(log.filesWritten).toEqual([]);
+    });
+
+    it("still fails a token that no step assigns, and a real run over a placeholder fails the assigning file", async () => {
+      await fsp.writeFile(path.join(dataDir, "table_a.2da"), new Uint8Array(0));
+      const unassigned = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true }).apply(parseChangesIni(TOKEN_INI("")));
+      expect(unassigned.errors).toEqual([expect.stringMatching(/2DAList spells\.2da: 2DAMEMORY1 was never assigned/)]);
+      const real = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs() }).apply(parseChangesIni(TOKEN_INI("2DAMEMORY1=RowIndex")));
+      expect(real.unverified).toEqual([]);
+      expect(real.errors.join("\n")).toMatch(/table_a\.2da.*is empty \(0 bytes\)/);
+      expect(real.errors.join("\n")).toMatch(/2DAMEMORY1 was never assigned/);
+    });
+
     it("dry run reports a zero-byte game copy of GFF, SSF and HACK targets as unverified", async () => {
       await fsp.writeFile(path.join(gameDir, "Override", "gff_a.utc"), new Uint8Array(0));
       await fsp.writeFile(path.join(gameDir, "Override", "ssf_a.ssf"), new Uint8Array(0));

@@ -107,6 +107,15 @@ class VirtualPlaceholderNotice extends Error {
   }
 }
 
+function gffAssignedTokens(m: GffModifier): { pool: "2damemory"; token: number }[] {
+  if (m.kind === "storePath" || m.kind === "memoryAssign") return [{ pool: "2damemory", token: m.token }];
+  if (m.kind === "modify") return [];
+  return [
+    ...[...m.storeListIndex, ...m.storeFieldPath, ...m.copyMemory.map((c) => c.token)].map((token) => ({ pool: "2damemory" as const, token })),
+    ...m.children.flatMap((child) => gffAssignedTokens(child)),
+  ];
+}
+
 interface Destination {
   /** relative folder or archive path (posix separators, no trailing slash) */
   rel: string;
@@ -215,10 +224,10 @@ export class TslPatcher {
 
   private async applyConfig(config: PatcherConfig): Promise<boolean> {
     if (!(await this.checkRequired(config.settings))) return false;
-    await this.guard("TLKList", () => this.processTlk(config.tlk));
+    await this.guard("TLKList", () => this.processTlk(config.tlk), () => config.tlk.modifiers.flatMap((m) => (m.kind === "replace" ? [] : [{ pool: "strref" as const, token: m.token }])));
     await this.processInstall(config.install);
-    for (const f of config.twoda) await this.guard(`2DAList ${f.filename}`, () => this.process2da(f));
-    for (const f of config.gff) await this.guard(`GFFList ${f.filename}`, () => this.processGff(f));
+    for (const f of config.twoda) await this.guard(`2DAList ${f.filename}`, () => this.process2da(f), () => f.modifiers.flatMap((m) => m.stores.map((st) => ({ pool: st.pool, token: st.token }))));
+    for (const f of config.gff) await this.guard(`GFFList ${f.filename}`, () => this.processGff(f), () => f.modifiers.flatMap((m) => gffAssignedTokens(m)));
     for (const f of config.compile) await this.guard(`CompileList ${f.filename}`, () => this.processCompile(f));
     for (const f of config.hack) await this.guard(`HACKList ${f.filename}`, () => this.processHack(f));
     for (const f of config.ssf) await this.guard(`SSFList ${f.filename}`, () => this.processSsf(f));
@@ -246,13 +255,19 @@ export class TslPatcher {
     this.logger.error(msg);
   }
 
-  /** Run one file's processing; failures are recorded and do not stop the remaining files. */
-  private async guard(what: string, fn: () => Promise<void>): Promise<void> {
+  /**
+   * Run one file's processing; failures are recorded and do not stop the remaining files. When the file is
+   * skipped as unverified (virtual dry run), the tokens it would have assigned are remembered so later files that
+   * read them are reported as unverified rather than failing on a "never assigned" token.
+   */
+  private async guard(what: string, fn: () => Promise<void>, assigns?: () => { pool: "2damemory" | "strref"; token: number }[]): Promise<void> {
     try {
       await fn();
     } catch (err) {
-      if (err instanceof VirtualPlaceholderNotice) this.unverified(`${what}: ${err.message}`);
-      else if (err instanceof PatcherFileError || err instanceof PatcherTokenError) this.error(`${what}: ${err.message}`);
+      if (err instanceof VirtualPlaceholderNotice || (err instanceof PatcherTokenError && err.unverified)) {
+        this.unverified(`${what}: ${err.message}`);
+        for (const { pool, token } of assigns?.() ?? []) this.mem.markUnverified(pool, token);
+      } else if (err instanceof PatcherFileError || err instanceof PatcherTokenError) this.error(`${what}: ${err.message}`);
       else if (err instanceof Error) this.error(`${what}: ${err.name}: ${err.message}`);
       else this.error(`${what}: ${String(err)}`);
     }
