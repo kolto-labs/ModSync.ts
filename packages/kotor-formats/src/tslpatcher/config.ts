@@ -469,8 +469,11 @@ function parseInstallList(ini: IniDocument): InstallFolderConfig[] {
   const s = ini.getSection("InstallList");
   if (!s) return out;
   for (const e of s.numbered("install_folder")) {
-    const folderSection = requireSection(ini, e.value.trim(), s.name, e.key);
-    // The section name is the destination folder (or archive path) relative to the game dir.
+    // TSLPatcher/HoloPatcher: the section is named by the KEY ([install_folderN]) and the value is the
+    // destination folder (or archive path) relative to the game dir. A section named after the value is
+    // accepted as a fallback.
+    const folderSection = ini.getSection(e.key) ?? ini.getSection(e.value.trim());
+    if (!folderSection) throw new PatcherConfigError(`references section [${e.key}] which does not exist`, s.name, e.key);
     const folder: InstallFolderConfig = { destination: normalizeDest(e.value, "Override"), files: [] };
     for (const f of fileListEntries(folderSection)) {
       const filename = f.value.trim();
