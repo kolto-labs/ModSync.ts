@@ -189,30 +189,37 @@ export class TslPatcher {
     this.backupEnabled = config.settings.backupFiles;
     if (this.dryRun) this.info("dry run: no files will be written");
 
+    let completed = false;
+    let failure: { error: unknown } | undefined;
     try {
-      if (!(await this.checkRequired(config.settings))) return this.log;
-      await this.guard("TLKList", () => this.processTlk(config.tlk));
-      await this.processInstall(config.install);
-      for (const f of config.twoda) await this.guard(`2DAList ${f.filename}`, () => this.process2da(f));
-      for (const f of config.gff) await this.guard(`GFFList ${f.filename}`, () => this.processGff(f));
-      for (const f of config.compile) await this.guard(`CompileList ${f.filename}`, () => this.processCompile(f));
-      for (const f of config.hack) await this.guard(`HACKList ${f.filename}`, () => this.processHack(f));
-      for (const f of config.ssf) await this.guard(`SSFList ${f.filename}`, () => this.processSsf(f));
+      completed = await this.applyConfig(config);
     } catch (error) {
       this.markUnsupported("patcher apply aborted before completion");
-      throw error;
-    } finally {
-      try {
-        await this.finishBackup();
-      } catch (error) {
-        this.markUnsupported("backup finalization failed");
-        throw error;
-      } finally {
-        this.finalizeMutationPlan();
-      }
+      failure = { error };
     }
+    try {
+      await this.finishBackup();
+    } catch (error) {
+      this.markUnsupported("backup finalization failed");
+      failure = { error };
+    }
+    this.finalizeMutationPlan();
+    if (failure) throw failure.error;
+    if (!completed) return this.log;
     this.info(`done: ${this.log.filesWritten.length} file(s) ${this.dryRun ? "would be " : ""}written, ${this.log.warnings.length} warning(s), ${this.log.errors.length} error(s)`);
     return this.log;
+  }
+
+  private async applyConfig(config: PatcherConfig): Promise<boolean> {
+    if (!(await this.checkRequired(config.settings))) return false;
+    await this.guard("TLKList", () => this.processTlk(config.tlk));
+    await this.processInstall(config.install);
+    for (const f of config.twoda) await this.guard(`2DAList ${f.filename}`, () => this.process2da(f));
+    for (const f of config.gff) await this.guard(`GFFList ${f.filename}`, () => this.processGff(f));
+    for (const f of config.compile) await this.guard(`CompileList ${f.filename}`, () => this.processCompile(f));
+    for (const f of config.hack) await this.guard(`HACKList ${f.filename}`, () => this.processHack(f));
+    for (const f of config.ssf) await this.guard(`SSFList ${f.filename}`, () => this.processSsf(f));
+    return true;
   }
 
   // ----------------------------------------------------------------------
