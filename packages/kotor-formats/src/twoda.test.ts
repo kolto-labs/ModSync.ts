@@ -93,4 +93,116 @@ describe("2da", () => {
     for (let i = 0; i < 20000; i++) t.addRow(undefined, { a: `value${i}` });
     expect(() => write2da(t)).toThrow(/65535/);
   });
+
+  describe("binary layout robustness", () => {
+    function dataSizeOffset(bytes: Uint8Array, cellCount: number): number {
+      let pos = 9;
+      while (bytes[pos] !== 0) pos++;
+      pos++;
+      const rowCount = new DataView(bytes.buffer, bytes.byteOffset).getUint32(pos, true);
+      pos += 4;
+      for (let i = 0; i < rowCount; i++) {
+        while (bytes[pos] !== 0x09) pos++;
+        pos++;
+      }
+      return pos + cellCount * 2;
+    }
+
+    function wideTable(): TwoDA {
+      const columns = Array.from({ length: 40 }, (_, i) => `col${i}`);
+      const t = new TwoDA(columns);
+      for (let r = 0; r < 12; r++) {
+        const cells: Record<string, string> = {};
+        columns.forEach((c, i) => {
+          if (i === 3) cells[c] = "";
+          else if (i % 5 === 0) cells[c] = "shared";
+          else if (i % 7 === 0) cells[c] = "****";
+          else cells[c] = `v${r}_${i}`;
+        });
+        t.addRow(r % 4 === 3 ? "" : String(r), cells);
+      }
+      return t;
+    }
+
+    function cellsOf(t: TwoDA): string[][] {
+      return t.rows.map((r) => [r.label, ...t.columns.map((c) => r.cells.get(c) ?? "")]);
+    }
+
+    it("round-trips wide tables with empty, duplicate and all-empty columns", () => {
+      const t = wideTable();
+      const bytes = write2da(t);
+      expect(bytes.length).toBeGreaterThan(1000);
+      const back = read2da(bytes);
+      expect(back.columns).toEqual(t.columns);
+      expect(cellsOf(back)).toEqual(cellsOf(t));
+      expect(write2da(back)).toEqual(bytes);
+    });
+
+    it("round-trips a table whose cells are all empty strings", () => {
+      const t = new TwoDA(["a", "b", "c"]);
+      for (let i = 0; i < 5; i++) t.addRow(undefined, { a: "", b: "", c: "" });
+      const bytes = write2da(t);
+      const back = read2da(bytes);
+      expect(cellsOf(back)).toEqual(cellsOf(t));
+      expect(write2da(back)).toEqual(bytes);
+    });
+
+    it("round-trips tables without rows or without columns", () => {
+      const noRows = new TwoDA(["a", "b"]);
+      expect(read2da(write2da(noRows)).columns).toEqual(["a", "b"]);
+      const noColumns = new TwoDA([]);
+      noColumns.addRow("0");
+      const back = read2da(write2da(noColumns));
+      expect(back.columns).toEqual([]);
+      expect(back.rows.map((r) => r.label)).toEqual(["0"]);
+    });
+
+    it("reads files whose DataSize field is zero", () => {
+      const t = wideTable();
+      const bytes = write2da(t);
+      const patched = bytes.slice();
+      new DataView(patched.buffer).setUint16(dataSizeOffset(patched, t.width * t.height), 0, true);
+      const back = read2da(patched);
+      expect(cellsOf(back)).toEqual(cellsOf(t));
+      expect(write2da(back)).toEqual(bytes);
+    });
+
+    it("still rejects offsets beyond a zero DataSize block", () => {
+      const t = new TwoDA(["a"]);
+      t.addRow("0", { a: "value" });
+      const patched = write2da(t);
+      const view = new DataView(patched.buffer);
+      const sizeAt = dataSizeOffset(patched, 1);
+      view.setUint16(sizeAt, 0, true);
+      view.setUint16(sizeAt - 2, 500, true);
+      expect(() => read2da(patched)).toThrow(/outside the data block/);
+    });
+  });
+
+  describe("text layout", () => {
+    const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+    it("reads a 2DA V2.0 file", () => {
+      const t = read2da(encode('2DA V2.0\r\n\r\n  label  name   value\r\n0  FORCE_PUSH  "two words"  ****\r\n1  FORCE_WAVE  ""  7\r\n'));
+      expect(t.columns).toEqual(["label", "name", "value"]);
+      expect(t.rows.map((r) => r.label)).toEqual(["0", "1"]);
+      expect(t.getCell(0, "label")).toBe("FORCE_PUSH");
+      expect(t.getCell(0, "name")).toBe("two words");
+      expect(t.getCell(0, "value")).toBe("****");
+      expect(t.getCell(1, "name")).toBe("");
+      expect(t.getCell(1, "value")).toBe("7");
+      expect(read2da(write2da(t)).getCell(0, "name")).toBe("two words");
+    });
+
+    it("reads a 2DA V2.0 file with a DEFAULT line and short rows", () => {
+      const t = read2da(encode("2DA V2.0\nDEFAULT: ****\na b c\n0 x\n1 y z\n"));
+      expect(t.columns).toEqual(["a", "b", "c"]);
+      expect(t.getCell(0, "b")).toBe("");
+      expect(t.getCell(1, "c")).toBe("");
+    });
+
+    it("rejects text rows with more cells than columns", () => {
+      expect(() => read2da(encode("2DA V2.0\n\na b\n0 x y z\n"))).toThrow(/cells for 2 columns/);
+    });
+  });
 });
