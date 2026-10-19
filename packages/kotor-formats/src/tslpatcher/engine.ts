@@ -22,6 +22,7 @@ import {
   splitGffPath,
   writeGff,
 } from "../gff.js";
+import { KeyBifError, bifSourceFromBytes, parseKey, readBifResource, type BifByteSource, type KeyFile } from "../keybif.js";
 import { splitResourceName } from "../restypes.js";
 import { readSsf, writeSsf } from "../ssf.js";
 import { Tlk, readTlk, writeTlk } from "../tlk.js";
@@ -156,6 +157,7 @@ export class TslPatcher {
   private readonly archives = new Map<string, Encapsulated>();
   private readonly placeholderArchives = new Set<string>();
   private readonly moduleSiblings = new Map<string, Encapsulated | "placeholder">();
+  private readonly keyFiles = new Map<string, KeyFile>();
   private readonly overlay = new Map<string, Uint8Array>();
   private readonly touched = new Set<string>();
   private createdFiles: string[] = [];
@@ -184,6 +186,7 @@ export class TslPatcher {
     this.archives.clear();
     this.placeholderArchives.clear();
     this.moduleSiblings.clear();
+    this.keyFiles.clear();
     this.overlay.clear();
     this.dirCache.clear();
     this.backupEnabled = config.settings.backupFiles;
@@ -606,7 +609,71 @@ export class TslPatcher {
     }
     const looked = (await this.gamePath(dest.isArchive ? dest.rel : `${dest.rel}/${cfg.filename}`)).path;
     await this.noteUnverifiableModule(dest, cfg.filename);
-    throw new PatcherFileError(`${cfg.filename} not found in ${looked} nor in tslpatchdata (resources packed in BIF archives are not read; ship a copy in tslpatchdata or place it in ${dest.rel})`);
+    if (dest.isArchive) throw new PatcherFileError(`${cfg.filename} not found in ${looked} nor in tslpatchdata (ship a copy in tslpatchdata)`);
+    const base = await this.readBaseGameResource(cfg.filename);
+    if (typeof base !== "string") return { data: this.requireBytes(base.data, cfg.filename, base.source), source: base.source, dest };
+    throw new PatcherFileError(`${cfg.filename} not found in ${looked} nor in tslpatchdata nor in the base game's chitin.key/BIF archives (${base}; ship a copy in tslpatchdata or place it in ${dest.rel})`);
+  }
+
+  /**
+   * Base-game fallback: locate `filename` through `chitin.key` and extract it
+   * from its BIF. Returns the reason it is unavailable as a string. In a
+   * virtual dry run an absent/zero-byte `chitin.key` or BIF is reported as
+   * unverified instead.
+   */
+  private async readBaseGameResource(filename: string): Promise<{ data: Uint8Array; source: string } | string> {
+    const { resref, type } = splitResourceName(filename);
+    if (type === undefined) return "unknown resource extension";
+    const keyRef = await this.gamePath("chitin.key");
+    const keyBytes = keyRef.exists ? await this.readAbs(keyRef.path) : undefined;
+    if (!keyBytes || keyBytes.byteLength === 0) {
+      if (this.isVirtualDryRun()) {
+        throw new VirtualPlaceholderNotice(`dry run: ${filename} is in neither the game directory nor tslpatchdata, and chitin.key is ${keyBytes ? "a zero-byte virtual placeholder" : "absent from the virtual game"}, so its base-game BIF copy cannot be read; content patch not verified`);
+      }
+      return keyBytes ? "chitin.key is empty (0 bytes)" : "chitin.key not found";
+    }
+    let key = this.keyFiles.get(keyRef.path);
+    if (!key) {
+      try {
+        key = parseKey(keyBytes);
+      } catch (err) {
+        if (err instanceof KeyBifError) throw new PatcherFileError(`${filename}: cannot read ${keyRef.path}: ${err.message}`);
+        throw err;
+      }
+      this.keyFiles.set(keyRef.path, key);
+    }
+    const hit = key.find(resref, type);
+    if (!hit) return "not listed in chitin.key";
+    const bif = key.bifs[hit.bifIndex];
+    if (!bif) throw new PatcherFileError(`${filename}: chitin.key references BIF index ${hit.bifIndex} but lists only ${key.bifs.length}`);
+    const bifRef = await this.gamePath(bif.filename);
+    const bifLabel = bif.filename.replace(/\\/g, "/");
+    if (!bifRef.exists) {
+      if (this.isVirtualDryRun()) throw new VirtualPlaceholderNotice(`dry run: ${filename} is packed in ${bifLabel}, which is absent from the virtual game; content patch not verified`);
+      throw new PatcherFileError(`${filename}: chitin.key places it in ${bifLabel}, which is missing from ${this.gameDir}`);
+    }
+    const bifSource = await this.openBif(bifRef.path);
+    if (bifSource.length === 0) {
+      if (this.isVirtualDryRun()) throw new VirtualPlaceholderNotice(`dry run: ${filename} is packed in ${bifLabel}, a zero-byte virtual placeholder; content patch not verified`);
+      throw new PatcherFileError(`${filename}: ${bifLabel} is empty (0 bytes)`);
+    }
+    try {
+      return { data: await readBifResource(bifSource, hit.resourceIndex, type), source: `game ${bifLabel}` };
+    } catch (err) {
+      if (err instanceof KeyBifError) throw new PatcherFileError(`${filename}: cannot read it from ${bifLabel}: ${err.message}`);
+      throw err;
+    }
+  }
+
+  private async openBif(abs: string): Promise<BifByteSource> {
+    const pending = this.overlay.get(abs);
+    if (pending) return bifSourceFromBytes(pending);
+    const ranged = this.fs;
+    if (ranged.readRange && ranged.fileSize) {
+      const length = await ranged.fileSize(abs);
+      return { length, read: (offset, count) => ranged.readRange!(abs, offset, count) };
+    }
+    return bifSourceFromBytes(await this.fs.readFile(abs));
   }
 
   private async saveTarget(cfg: PatchFileCommon, dest: Destination, data: Uint8Array): Promise<void> {

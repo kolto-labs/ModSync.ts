@@ -4,5 +4,6 @@ export * from "./twoda.js";
 export * from "./tlk.js";
 export * from "./ssf.js";
 export * from "./erf.js";
+export * from "./keybif.js";
 export * from "./restypes.js";
 export * from "./tslpatcher/index.js";

@@ -12,6 +12,10 @@ export interface PatcherFs {
   realpath?(p: string): Promise<string>;
   isSymbolicLink?(p: string): Promise<boolean>;
   readFile(p: string): Promise<Uint8Array>;
+  /** Optional: read `length` bytes at `offset` (used to extract from large BIF archives without reading them whole). */
+  readRange?(p: string, offset: number, length: number): Promise<Uint8Array>;
+  /** Optional: size in bytes (paired with `readRange`). */
+  fileSize?(p: string): Promise<number>;
   writeFile(p: string, data: Uint8Array): Promise<void>;
   /** Create a directory and all missing parents; no error when it exists. */
   mkdirp(p: string): Promise<void>;
