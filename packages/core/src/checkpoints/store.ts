@@ -142,7 +142,19 @@ function safeRelative(value:unknown):asserts value is string {
  if(typeof value!=="string"||!value||/[\\:\x00-\x1f\x7f]/.test(value)||value.split("/").some(part=>!part||part==="."||part===".."||/[. ]$/.test(part)||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(part)))throw new CheckpointError("Invalid canonical checkpoint relative path");
 }
 function rememberCasePath(path:string,spellings:Map<string,string>):void {
- let prefix="";for(const part of path.split("/")){prefix=prefix?`${prefix}/${part}`:part;const key=prefix.toLowerCase(),previous=spellings.get(key);if(previous!==undefined&&previous!==prefix)throw new CheckpointError("Checkpoint path has inconsistent case spelling");spellings.set(key,prefix);}
+ let prefix="";for(const part of path.split("/")){prefix=prefix?`${prefix}/${part}`:part;const key=prefix.toLowerCase(),previous=spellings.get(key);if(previous!==undefined&&previous!==prefix)throw new CheckpointError(`Checkpoint path has inconsistent case spelling: "${previous}" vs "${prefix}"`);spellings.set(key,prefix);}
+}
+/** Re-spell `rel` with the first spelling the session saw for each path prefix (recording new prefixes), so one file never carries two spellings. */
+function canonicalCase(rel:string,spellings:Map<string,string>):string {
+ let canon="";for(const part of rel.split("/")){const candidate=canon?`${canon}/${part}`:part,key=candidate.toLowerCase();canon=spellings.get(key)??candidate;spellings.set(key,canon);}
+ return canon;
+}
+function seedSpellings(entries:readonly CheckpointFileEntry[]):Map<string,string> {
+ const spellings=new Map<string,string>();for(const entry of entries)canonicalCase(entry.path,spellings);
+ return spellings;
+}
+function canonicalRels(rels:readonly string[],spellings:Map<string,string>):string[] {
+ return [...new Set(rels.map(rel=>canonicalCase(rel,spellings)))];
 }
 function safeAbsolute(value:unknown):asserts value is string {
  if(typeof value!=="string"||!isAbsolute(value)||/[\x00-\x1f\x7f]/.test(value)||toPosix(resolve(value))!==value)throw new CheckpointError("Invalid canonical checkpoint root/path");
@@ -463,8 +475,10 @@ export class CheckpointStore {
   private async expandPaths(paths: string[]): Promise<string[]> {
     const out = new Set<string>();
     for (const raw of paths) {
-      const rel = this.relativePath(raw);
-      if (!rel) continue;
+      const requested = this.relativePath(raw);
+      if (!requested) continue;
+      const resolved = await this.fs.resolveCase(this.absolutePath(requested));
+      const rel = (resolved !== undefined && this.relativePath(toPosix(resolved))) || requested;
       const abs = this.absolutePath(rel);
       await ordinaryPath(abs,"entry",true);const st = await this.fs.stat(abs);
       if (st?.isDirectory) {
@@ -508,9 +522,10 @@ export class CheckpointStore {
   beforeTouch(session: CheckpointSession, paths: string[]): Promise<number> {
     return this.withLock(session.id, async () => {
       const stored=await this.getSession(session.id);this.requirePublished(stored);
-      const rels = await this.expandPaths(paths);
-      if (rels.length === 0) return 0;
+      const onDisk = await this.expandPaths(paths);
+      if (onDisk.length === 0) return 0;
       const baseline = await this.readManifest(session.id, 0);
+      const rels = canonicalRels(onDisk, seedSpellings(baseline.entries));
       const tracked = new Set(baseline.entries.map((e) => e.path));
       let added = 0;
       let bytes = 0;
@@ -523,6 +538,7 @@ export class CheckpointStore {
         added++;
       }
       if (added > 0) {
+        validateManifest(baseline,session.id,0);
         await this.beginPublication(stored,"baseline",baseline.entries.length);
         await writeJsonAtomic(this.manifestFile(session.id, 0), baseline);
         stored.checkpoints[0].changedCount = baseline.entries.length;
@@ -665,12 +681,13 @@ export class CheckpointStore {
       const index = prevIndex + 1;
       const isAnchor = index % stored.anchorInterval === 0;
 
-      const rels = await this.expandPaths(meta.touched);
       const baseline = await this.readManifest(session.id, 0);
+      const spellings = seedSpellings(baseline.entries);
+      const rels = canonicalRels(await this.expandPaths(meta.touched), spellings);
       const prevState = await this.computeState(session.id, prevIndex);
       const tracked = new Set(baseline.entries.map((e) => e.path));
       let baselineDirty = false;
-      const unpredicted = new Set(await this.expandPaths(meta.unpredicted ?? []));
+      const unpredicted = new Set(canonicalRels(await this.expandPaths(meta.unpredicted ?? []), spellings));
       let unverified = false;
       for (const rel of rels) {
         if (!tracked.has(rel)) {
@@ -718,9 +735,12 @@ export class CheckpointStore {
         storedBytes,
       };
       if (unverified) stored.unverifiedBaselineAt = [...(stored.unverifiedBaselineAt ?? []), index];
+      const manifest = { id, index, isAnchor, entries } satisfies CheckpointManifest;
+      if(baselineDirty)validateManifest(baseline,session.id,0);
+      validateManifest(manifest,session.id,index);
       await this.beginPublication(stored,"checkpoint",baseline.entries.length);
       if(baselineDirty)await writeJsonAtomic(this.manifestFile(session.id,0),baseline);
-      await writeJsonAtomic(this.manifestFile(session.id, index), { id, index, isAnchor, entries } satisfies CheckpointManifest);
+      await writeJsonAtomic(this.manifestFile(session.id, index), manifest);
       stored.checkpoints.push(cp);
       if (baselineDirty) stored.checkpoints[0].changedCount = baseline.entries.length;
       delete stored.pendingPublication;
