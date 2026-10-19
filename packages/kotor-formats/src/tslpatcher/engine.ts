@@ -165,6 +165,8 @@ export class TslPatcher {
   private readonly dirCache = new Map<string, string[]>();
   private readonly archives = new Map<string, Encapsulated>();
   private readonly placeholderArchives = new Set<string>();
+  /** dry run only: targets whose earlier content patch was skipped as unverified, so their current content is stale */
+  private readonly unverifiedTargets = new Set<string>();
   private readonly moduleSiblings = new Map<string, Encapsulated | "placeholder">();
   private readonly keyFiles = new Map<string, KeyFile>();
   private readonly overlay = new Map<string, Uint8Array>();
@@ -194,6 +196,7 @@ export class TslPatcher {
     this.backupOutputsPlanned = false;
     this.archives.clear();
     this.placeholderArchives.clear();
+    this.unverifiedTargets.clear();
     this.moduleSiblings.clear();
     this.keyFiles.clear();
     this.overlay.clear();
@@ -226,11 +229,11 @@ export class TslPatcher {
     if (!(await this.checkRequired(config.settings))) return false;
     await this.guard("TLKList", () => this.processTlk(config.tlk), () => config.tlk.modifiers.flatMap((m) => (m.kind === "replace" ? [] : [{ pool: "strref" as const, token: m.token }])));
     await this.processInstall(config.install);
-    for (const f of config.twoda) await this.guard(`2DAList ${f.filename}`, () => this.process2da(f), () => f.modifiers.flatMap((m) => m.stores.map((st) => ({ pool: st.pool, token: st.token }))));
-    for (const f of config.gff) await this.guard(`GFFList ${f.filename}`, () => this.processGff(f), () => f.modifiers.flatMap((m) => gffAssignedTokens(m)));
+    for (const f of config.twoda) await this.guard(`2DAList ${f.filename}`, () => this.process2da(f), () => f.modifiers.flatMap((m) => m.stores.map((st) => ({ pool: st.pool, token: st.token }))), f);
+    for (const f of config.gff) await this.guard(`GFFList ${f.filename}`, () => this.processGff(f), () => f.modifiers.flatMap((m) => gffAssignedTokens(m)), f);
     for (const f of config.compile) await this.guard(`CompileList ${f.filename}`, () => this.processCompile(f));
-    for (const f of config.hack) await this.guard(`HACKList ${f.filename}`, () => this.processHack(f));
-    for (const f of config.ssf) await this.guard(`SSFList ${f.filename}`, () => this.processSsf(f));
+    for (const f of config.hack) await this.guard(`HACKList ${f.filename}`, () => this.processHack(f), undefined, f);
+    for (const f of config.ssf) await this.guard(`SSFList ${f.filename}`, () => this.processSsf(f), undefined, f);
     return true;
   }
 
@@ -262,19 +265,53 @@ export class TslPatcher {
   /**
    * Run one file's processing; failures are recorded and do not stop the remaining files. When the file is
    * skipped as unverified (virtual dry run), the tokens it would have assigned are remembered so later files that
-   * read them are reported as unverified rather than failing on a "never assigned" token.
+   * read them are reported as unverified rather than failing on a "never assigned" token. Its target is remembered
+   * too: a later file that reads that target sees stale content (the skipped patch never ran), so a missing
+   * member or field there is unverified rather than an error. Real targets that no skipped patch touched still fail.
    */
-  private async guard(what: string, fn: () => Promise<void>, assigns?: () => { pool: "2damemory" | "strref"; token: number }[]): Promise<void> {
+  private async guard(what: string, fn: () => Promise<void>, assigns?: () => { pool: "2damemory" | "strref"; token: number }[], target?: PatchFileCommon): Promise<void> {
     try {
       await fn();
     } catch (err) {
       if (err instanceof VirtualPlaceholderNotice || (err instanceof PatcherTokenError && err.unverified)) {
         this.unverified(`${what}: ${err.message}`);
-        for (const { pool, token } of assigns?.() ?? []) this.mem.markUnverified(pool, token);
+        await this.skipTarget(assigns, target);
+      } else if (err instanceof PatcherFileError && target && (await this.readsUnverifiedTarget(target))) {
+        this.unverified(`${what}: dry run: ${err.message}; its target was left unpatched by an earlier step that could not be verified (zero-byte virtual placeholder), so this content patch is not verified`);
+        await this.skipTarget(assigns, target);
       } else if (err instanceof PatcherFileError || err instanceof PatcherTokenError) this.error(`${what}: ${err.message}`);
       else if (err instanceof Error) this.error(`${what}: ${err.name}: ${err.message}`);
       else this.error(`${what}: ${String(err)}`);
     }
+  }
+
+  private async skipTarget(assigns: (() => { pool: "2damemory" | "strref"; token: number }[]) | undefined, target: PatchFileCommon | undefined): Promise<void> {
+    for (const { pool, token } of assigns?.() ?? []) this.mem.markUnverified(pool, token);
+    if (!target || !this.isVirtualDryRun()) return;
+    const written = await this.targetKeys(target, [target.saveAs ?? target.filename]);
+    for (const key of written) this.unverifiedTargets.add(key);
+  }
+
+  private async readsUnverifiedTarget(target: PatchFileCommon): Promise<boolean> {
+    if (!this.isVirtualDryRun() || this.unverifiedTargets.size === 0) return false;
+    const read = await this.targetKeys(target, [target.saveAs ?? target.filename, target.filename]);
+    return read.some((key) => this.unverifiedTargets.has(key));
+  }
+
+  /** Case-insensitive identities of the game files / archive members a list section targets under the given names. */
+  private async targetKeys(target: PatchFileCommon, names: string[]): Promise<string[]> {
+    let dest: Destination;
+    try {
+      dest = this.parseDestination(target.destination);
+    } catch {
+      return [];
+    }
+    const keys: string[] = [];
+    for (const name of new Set(names)) {
+      const key = dest.isArchive ? `${(await this.gamePath(dest.rel)).path}#${name}` : (await this.gamePath(`${dest.rel}/${name}`)).path;
+      keys.push(key.toLowerCase());
+    }
+    return keys;
   }
 
   // ----------------------------------------------------------------------
@@ -417,6 +454,9 @@ export class TslPatcher {
           this.placeholderArchives.add(abs);
           this.unverified(`dry run: ${path.basename(abs)} does not exist; the installer builds it from ${siblings.placeholders.join(", ")}, zero-byte virtual placeholders, so the module's existing contents are not verified`);
         } else this.info(`${path.basename(abs)} does not exist; building it from ${siblings.archives.length} module archive(s) (.rim/_s.rim/_dlg.erf)`);
+      } else if (this.isVirtualDryRun()) {
+        this.placeholderArchives.add(abs);
+        this.unverified(`dry run: ${path.basename(abs)} (${abs}) is absent from the virtual game; treated as an empty ${type.trim()} container, its existing contents are not verified`);
       } else this.warn(`archive ${abs} does not exist; creating an empty ${type.trim()}`);
     } else return undefined;
     this.archives.set(abs, enc);
