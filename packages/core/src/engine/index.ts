@@ -3,6 +3,7 @@ export * from "./order.js";
 export * from "./graph.js";
 export * from "./context.js";
 export * from "./patcherPort.js";
+export * from "./nssCompiler.js";
 export * from "./actions/index.js";
 export * from "./validator.js";
 export * from "./installer.js";
