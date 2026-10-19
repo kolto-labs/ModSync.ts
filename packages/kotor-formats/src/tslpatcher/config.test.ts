@@ -270,8 +270,13 @@ describe("parseNamespacesIni", () => {
       { key: "b", name: "Lite", iniName: "lite.ini" },
     ]);
   });
-  it("fails on missing sections", () => {
+  it("fails on a listed namespace whose section is missing", () => {
     expect(() => parseNamespacesIni("[Namespaces]\nNamespace0=a\n")).toThrow(PatcherConfigError);
-    expect(() => parseNamespacesIni("")).toThrow(/Namespaces/);
+  });
+  it("yields no namespaces when [Namespaces] is absent or empty", () => {
+    expect(parseNamespacesIni("")).toEqual([]);
+    expect(parseNamespacesIni("[Other]\nKey=1\n")).toEqual([]);
+    expect(parseNamespacesIni("[Namespaces]\n")).toEqual([]);
+    expect(parseNamespacesIni("; only a comment\n[Variant]\nName=Orphan\n")).toEqual([]);
   });
 });

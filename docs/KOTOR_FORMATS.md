@@ -286,7 +286,7 @@ IniName=changes.ini
 InfoName=info.rtf
 DataFolderName=tslpatchdata
 ```
-If absent, use `tslpatchdata/changes.ini` and `tslpatchdata/info.rtf`.
+If absent, or present without a `[Namespaces]` section or any `Namespace<N>` entries, use `tslpatchdata/changes.ini` and `tslpatchdata/info.rtf`. A listed entry whose section is missing is a malformed file and is an error.
 
 ## 8. Backup / uninstall conventions
 

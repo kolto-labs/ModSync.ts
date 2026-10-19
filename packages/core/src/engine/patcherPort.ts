@@ -97,14 +97,18 @@ export async function findChildCaseInsensitive(
 
 /**
  * Read `namespaces.ini` from the tslpatchdata dir or its parent. Returns
- * undefined when there is none. A malformed file throws.
+ * undefined when there is none or it declares no namespaces (the default
+ * `changes.ini` applies). A malformed file throws.
  */
 export async function listNamespaces(tslpatchdataDir: string, fs: FileSystemPort): Promise<Namespace[] | undefined> {
   const dir = normalizePath(tslpatchdataDir);
   const candidates = [dir, parentPath(dir)];
   for (const c of candidates) {
     const found = await findChildCaseInsensitive(fs, c, NAMESPACES_INI);
-    if (found) return parseNamespacesIni(decodeIni(await fs.readFile(found)));
+    if (found) {
+      const namespaces = parseNamespacesIni(decodeIni(await fs.readFile(found)));
+      return namespaces.length > 0 ? namespaces : undefined;
+    }
   }
   return undefined;
 }
@@ -148,16 +152,25 @@ async function resolveTarget(
         break;
       }
     }
-    if (nsText === undefined) throw new Error(`namespace ${req.namespaceIndex} requested but no ${NAMESPACES_INI} found`);
-    const namespaces = parseNamespacesIni(nsText);
-    namespace = namespaces[req.namespaceIndex];
-    if (!namespace) {
-      throw new Error(`namespace index ${req.namespaceIndex} is out of range (${namespaces.length} namespaces)`);
-    }
-    iniName = req.iniName ?? namespace.iniName;
-    if (namespace.dataFolderName) {
-      const sub = (await fs.readDir(dataDir)).find((n) => n.toLowerCase() === namespace!.dataFolderName!.toLowerCase());
-      if (sub) dataDir = joinPath(dataDir, sub);
+    const namespaces = nsText === undefined ? [] : parseNamespacesIni(nsText);
+    if (namespaces.length === 0) {
+      if (req.namespaceIndex !== 0) {
+        throw new Error(
+          nsText === undefined
+            ? `namespace ${req.namespaceIndex} requested but no ${NAMESPACES_INI} found`
+            : `namespace index ${req.namespaceIndex} is out of range (0 namespaces)`,
+        );
+      }
+    } else {
+      namespace = namespaces[req.namespaceIndex];
+      if (!namespace) {
+        throw new Error(`namespace index ${req.namespaceIndex} is out of range (${namespaces.length} namespaces)`);
+      }
+      iniName = req.iniName ?? namespace.iniName;
+      if (namespace.dataFolderName) {
+        const sub = (await fs.readDir(dataDir)).find((n) => n.toLowerCase() === namespace!.dataFolderName!.toLowerCase());
+        if (sub) dataDir = joinPath(dataDir, sub);
+      }
     }
   }
   const iniEntry = (await fs.readDir(dataDir)).find((n) => n.toLowerCase() === iniName.toLowerCase());

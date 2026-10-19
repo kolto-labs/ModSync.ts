@@ -23,6 +23,27 @@ describe("patcher port", () => {
     expect(ns?.map((n) => [n.name, n.iniName])).toEqual([["Only", "changes.ini"]]);
   });
 
+  it("treats a namespaces.ini without [Namespaces] as no namespaces", async () => {
+    const fs = new RealFileSystem();
+    await writeText(`${sb.mods}/e/tslpatchdata/changes.ini`, "");
+    await writeText(`${sb.mods}/e/tslpatchdata/namespaces.ini`, "[Unrelated]\nKey=1\n");
+    expect(await listNamespaces(`${sb.mods}/e/tslpatchdata`, fs)).toBeUndefined();
+    await writeText(`${sb.mods}/e/tslpatchdata/namespaces.ini`, "[Namespaces]\n");
+    expect(await listNamespaces(`${sb.mods}/e/tslpatchdata`, fs)).toBeUndefined();
+    await writeText(`${sb.mods}/m/tslpatchdata/namespaces.ini`, "[Namespaces]\nNamespace0=gone\n");
+    await expect(listNamespaces(`${sb.mods}/m/tslpatchdata`, fs)).rejects.toThrow();
+  });
+
+  it("native engine falls back to changes.ini for namespace 0 when namespaces.ini lists none", async () => {
+    await writeText(`${sb.mods}/f/tslpatchdata/changes.ini`, "[InstallList]\ninstall_folder0=Override\n\n[Override]\nFile0=a.txt\n");
+    await writeText(`${sb.mods}/f/tslpatchdata/a.txt`, "a");
+    await writeText(`${sb.mods}/f/tslpatchdata/namespaces.ini`, "[Unrelated]\nKey=1\n");
+    const patcher = createPatcher({ ...sb.settings, patcherEngine: "Native" }, NullLogger);
+    const r = await patcher.install({ tslpatchdataDir: `${sb.mods}/f/tslpatchdata`, gameDir: sb.kotor, namespaceIndex: 0, dryRun: true });
+    expect(r.ok).toBe(true);
+    expect(r.filesWritten).toEqual([`${sb.kotor}/Override/a.txt`]);
+  });
+
   it("decodes windows-1252 and UTF-8 BOM inis", () => {
     expect(decodeIni(new Uint8Array([0x4e, 0xe9]))).toBe("Né");
     expect(decodeIni(new Uint8Array([0xef, 0xbb, 0xbf, 0x4e, 0xc3, 0xa9]))).toBe("Né");

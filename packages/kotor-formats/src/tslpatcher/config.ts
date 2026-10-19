@@ -788,10 +788,16 @@ export function parseChangesIni(text: string): PatcherConfig {
   };
 }
 
+/**
+ * Parse `namespaces.ini`. A file without a `[Namespaces]` section, or with no
+ * `Namespace<N>` entries, declares no variants and yields `[]` so callers fall
+ * back to the default `changes.ini`. A listed entry whose section is missing
+ * is still an error.
+ */
 export function parseNamespacesIni(text: string): Namespace[] {
   const ini = parseIni(text);
   const s = ini.getSection("Namespaces");
-  if (!s) throw new PatcherConfigError("namespaces.ini has no [Namespaces] section");
+  if (!s) return [];
   const out: Namespace[] = [];
   for (const e of s.numbered("Namespace")) {
     const key = e.value.trim();
@@ -805,6 +811,5 @@ export function parseNamespacesIni(text: string): Namespace[] {
     if (data) ns.dataFolderName = data;
     out.push(ns);
   }
-  if (out.length === 0) throw new PatcherConfigError("[Namespaces] lists no Namespace<N> entries", s.name);
   return out;
 }
