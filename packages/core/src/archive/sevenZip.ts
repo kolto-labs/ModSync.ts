@@ -100,7 +100,14 @@ interface WasmRuntime {
   sink: { stdout: string[]; stderr: string[] };
 }
 
-let runtimePromise: Promise<WasmRuntime> | undefined;
+export const SEVEN_ZIP_WASM_RECYCLE_MOUNTS = 200;
+
+interface RuntimeSlot {
+  runtime: Promise<WasmRuntime>;
+  mounts: number;
+}
+
+let runtimeSlot: RuntimeSlot | undefined;
 let mountCounter = 0;
 
 async function createRuntime(): Promise<WasmRuntime> {
@@ -121,14 +128,33 @@ async function createRuntime(): Promise<WasmRuntime> {
   return { module, sink };
 }
 
-function getRuntime(): Promise<WasmRuntime> {
-  runtimePromise ??= createRuntime();
-  return runtimePromise;
+function acquireRuntime(mountCount: number): RuntimeSlot {
+  if (runtimeSlot && runtimeSlot.mounts >= SEVEN_ZIP_WASM_RECYCLE_MOUNTS) runtimeSlot = undefined;
+  runtimeSlot ??= { runtime: createRuntime(), mounts: 0 };
+  runtimeSlot.mounts += mountCount;
+  return runtimeSlot;
 }
 
 /** Drop the shared module after a crash so the next call starts clean. */
-function resetRuntime(): void {
-  runtimePromise = undefined;
+function resetRuntime(slot: RuntimeSlot): void {
+  if (runtimeSlot === slot) runtimeSlot = undefined;
+}
+
+class WasmCrashError extends Error {
+  override readonly name = "WasmCrashError";
+  constructor(
+    message: string,
+    readonly trap: boolean,
+    cause: unknown,
+  ) {
+    super(message, { cause });
+  }
+}
+
+const WASM_TRAP_MESSAGE = /table index is out of bounds|memory access out of bounds|unreachable|indirect call|null function|Aborted\(/i;
+
+function isWasmTrap(err: unknown): boolean {
+  return err instanceof Error && (err.name === "RuntimeError" || WASM_TRAP_MESSAGE.test(err.message));
 }
 
 function removeMemfsTree(fs: SevenZipModule["FS"], p: string): void {
@@ -157,15 +183,31 @@ interface Mount {
 /**
  * Run one 7z command in the wasm build. `mounts` maps host directories to
  * MEMFS mount points; `memfsFiles` are written before the run and removed
- * after. Throws on module-level crashes (not on non-zero 7z exit codes).
+ * after. A wasm trap discards the shared module and replays the identical
+ * command (mounts and MEMFS files included) once on a fresh module. Throws on
+ * module-level crashes (not on non-zero 7z exit codes).
  */
 export async function runSevenZipWasm(
   args: string[],
   mounts: Mount[] = [],
   memfsFiles: Record<string, string> = {},
 ): Promise<SevenZipRunResult> {
-  const runtime = await getRuntime();
-  const { module, sink } = runtime;
+  try {
+    return await runSevenZipWasmOnce(args, mounts, memfsFiles);
+  } catch (err) {
+    if (!(err instanceof WasmCrashError) || !err.trap) throw err;
+    try {
+      return await runSevenZipWasmOnce(args, mounts, memfsFiles);
+    } catch (retryErr) {
+      if (retryErr instanceof WasmCrashError) throw err;
+      throw retryErr;
+    }
+  }
+}
+
+async function runSevenZipWasmOnce(args: string[], mounts: Mount[], memfsFiles: Record<string, string>): Promise<SevenZipRunResult> {
+  const slot = acquireRuntime(mounts.length);
+  const { module, sink } = await slot.runtime;
   const FS = module.FS;
   sink.stdout.length = 0;
   sink.stderr.length = 0;
@@ -187,8 +229,8 @@ export async function runSevenZipWasm(
     try {
       code = (module.callMain(args) as unknown as number | undefined) ?? 0;
     } catch (err) {
-      resetRuntime();
-      throw new Error(`7z-wasm crashed running "${args.join(" ")}": ${describeWasmError(err)}`, { cause: err });
+      resetRuntime(slot);
+      throw new WasmCrashError(`7z-wasm crashed running "${args.join(" ")}": ${describeWasmError(err)}`, isWasmTrap(err), err);
     }
     return { code, stdout: sink.stdout.join("\n"), stderr: sink.stderr.join("\n") };
   } finally {
