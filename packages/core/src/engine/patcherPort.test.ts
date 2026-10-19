@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { RealFileSystem } from "../fs/realFileSystem.js";
+import type { FileSystemPort } from "../ports/filesystem.js";
 import { NullLogger } from "../logging/logger.js";
 import { createPatcher, decodeIni, listNamespaces } from "./patcherPort.js";
 import { makeSandbox, writeText, type Sandbox } from "./testing.js";
@@ -42,6 +43,41 @@ describe("patcher port", () => {
     const r = await patcher.install({ tslpatchdataDir: `${sb.mods}/f/tslpatchdata`, gameDir: sb.kotor, namespaceIndex: 0, dryRun: true });
     expect(r.ok).toBe(true);
     expect(r.filesWritten).toEqual([`${sb.kotor}/Override/a.txt`]);
+  });
+
+  it("lists the available inis when the changes ini is missing", async () => {
+    await writeText(`${sb.mods}/q/tslpatchdata/other.ini`, "[InstallList]\n");
+    await writeText(`${sb.mods}/q/tslpatchdata/changes_b.ini`, "[InstallList]\n");
+    await writeText(`${sb.mods}/q/tslpatchdata/a.txt`, "a");
+    for (const engine of ["Native", "HoloPatcher"] as const) {
+      const patcher = createPatcher({ ...sb.settings, patcherEngine: engine }, NullLogger);
+      const r = await patcher.install({ tslpatchdataDir: `${sb.mods}/q/tslpatchdata`, gameDir: sb.kotor, dryRun: true, fs: new RealFileSystem() });
+      expect(r.ok).toBe(false);
+      expect(r.errors[0]).toContain(`changes ini not found: ${sb.mods}/q/tslpatchdata/changes.ini`);
+      expect(r.errors[0]).toContain("changes_b.ini, other.ini");
+      expect(r.errors[0]).not.toContain("a.txt");
+    }
+    await writeText(`${sb.mods}/r/tslpatchdata/a.txt`, "a");
+    const patcher = createPatcher({ ...sb.settings, patcherEngine: "Native" }, NullLogger);
+    const none = await patcher.install({ tslpatchdataDir: `${sb.mods}/r/tslpatchdata`, gameDir: sb.kotor, dryRun: true, fs: new RealFileSystem() });
+    expect(none.errors[0]).toMatch(/changes ini not found.*none/);
+  });
+
+  it("treats a missing data dir as empty but surfaces other readDir failures", async () => {
+    const patcher = createPatcher({ ...sb.settings, patcherEngine: "Native" }, NullLogger);
+    const missing = await patcher.install({ tslpatchdataDir: `${sb.mods}/absent/tslpatchdata`, gameDir: sb.kotor, dryRun: true, fs: new RealFileSystem() });
+    expect(missing.ok).toBe(false);
+    expect(missing.errors[0]).toContain("changes ini not found");
+    expect(missing.errors[0]).not.toContain("cannot list");
+    const denied: FileSystemPort = Object.assign(Object.create(new RealFileSystem()) as FileSystemPort, {
+      readDir: async () => {
+        throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+      },
+    });
+    const blocked = await patcher.install({ tslpatchdataDir: `${sb.mods}/q/tslpatchdata`, gameDir: sb.kotor, dryRun: true, fs: denied });
+    expect(blocked.ok).toBe(false);
+    expect(blocked.errors[0]).toContain("cannot list directory");
+    expect(blocked.errors[0]).toContain("permission denied");
   });
 
   it("decodes windows-1252 and UTF-8 BOM inis", () => {

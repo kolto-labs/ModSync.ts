@@ -113,6 +113,24 @@ export async function listNamespaces(tslpatchdataDir: string, fs: FileSystemPort
   return undefined;
 }
 
+/** True for "no such directory" style errors; every other read failure is a real problem. */
+function isMissingDirError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (code === "ENOENT" || code === "ENOTDIR") return true;
+  return err instanceof Error && /^(ENOENT|ENOTDIR)\b/.test(err.message);
+}
+
+/** "changes ini not found" message that also lists the *.ini names actually present in the data dir. */
+async function describeMissingIni(fs: PatcherFs, iniPath: string, dataDir: string): Promise<string> {
+  const base = `changes ini not found: ${iniPath}`;
+  try {
+    const inis = (await fs.readDir(dataDir)).filter((n) => /\.ini$/i.test(n)).sort();
+    return `${base} (*.ini in ${dataDir}: ${inis.length > 0 ? inis.join(", ") : "none"})`;
+  } catch (err) {
+    return `${base} (cannot list ${dataDir}: ${err instanceof Error ? err.message : String(err)})`;
+  }
+}
+
 /** Adapt a FileSystemPort to the minimal PatcherFs the native engine needs. */
 export function patcherFsFromPort(fs: FileSystemPort): PatcherFs {
   return {
@@ -125,8 +143,9 @@ export function patcherFsFromPort(fs: FileSystemPort): PatcherFs {
     readDir: async (p) => {
       try {
         return (await fs.readDir(p)).map((e) => e.name);
-      } catch {
-        return [];
+      } catch (err) {
+        if (isMissingDirError(err)) return [];
+        throw new Error(`cannot list directory ${p}: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
       }
     },
     copyFile: (src, dest) => fs.copyFile(src, dest),
@@ -198,7 +217,7 @@ class NativePatcher implements PatcherPort {
     try {
       const target = await resolveTarget(req, fs);
       if (!(await fs.exists(target.iniPath))) {
-        return fail(log.lines, `changes ini not found: ${target.iniPath}`);
+        return fail(log.lines, await describeMissingIni(fs, target.iniPath, target.dataDir));
       }
       const config = parseChangesIni(decodeIni(await fs.readFile(target.iniPath)));
       log.push(`applying ${baseName(target.iniPath)} from ${target.dataDir} to ${req.gameDir}${req.dryRun ? " (dry run)" : ""}`);
@@ -239,7 +258,7 @@ async function dryRunParse(req: PatcherRequest, logger: Logger, engineName: stri
   const fs = req.fs ? patcherFsFromPort(req.fs) : new NodePatcherFs();
   try {
     const target = await resolveTarget(req, fs);
-    if (!(await fs.exists(target.iniPath))) return fail(log.lines, `changes ini not found: ${target.iniPath}`);
+    if (!(await fs.exists(target.iniPath))) return fail(log.lines, await describeMissingIni(fs, target.iniPath, target.dataDir));
     parseChangesIni(decodeIni(await fs.readFile(target.iniPath)));
     const warning = `dry run: ${engineName} is not executed; ${baseName(target.iniPath)} parsed successfully`;
     log.push(warning);

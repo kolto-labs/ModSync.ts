@@ -1,7 +1,9 @@
 /**
  * Extract: unpack every archive matched by the sources into
  * `<archive dir>/<archive name without extension>/` (or `destination`).
- * A dry run lists the archive and registers its entries in the VFS.
+ * A dry run lists the archive and registers its entries in the VFS; entries
+ * are empty placeholders except small `.ini` files under `tslpatchdata`, whose
+ * real content is exposed so `namespaces.ini` can drive the changes ini name.
  */
 
 import { ArchiveError } from "../../archive/common.js";
@@ -12,6 +14,19 @@ import type { Instruction, InstructionResult, ModComponent, ModOption } from "..
 import type { ArchiveReader } from "../../ports/archive.js";
 import type { InstallContext } from "../context.js";
 import { ActionError, checkCancelled, resolveDestination, resolveSources, runAction } from "./common.js";
+
+/** Largest single tslpatchdata ini whose content a dry run exposes. */
+const DRY_RUN_INI_MAX_BYTES = 1024 * 1024;
+/** Total ini bytes a dry run may read from one archive. */
+const DRY_RUN_INI_TOTAL_BYTES = 16 * 1024 * 1024;
+
+/** True for a `.ini` entry located under a `tslpatchdata` folder (case-insensitive). */
+export function isTslpatchdataIni(entryPath: string): boolean {
+  const segments = entryPath.split(/[\\/]+/).filter(Boolean);
+  const name = segments.pop();
+  if (!name || !/\.ini$/i.test(name)) return false;
+  return segments.some((segment) => segment.toLowerCase() === "tslpatchdata");
+}
 
 /** Strip the archive extension: "Foo v1.2.zip" -> "Foo v1.2", "x.7z.exe" -> "x.7z". */
 export function archiveFolderName(archivePath: string): string {
@@ -58,10 +73,37 @@ export async function executeExtract(
             run.touch(dest);
             if (ctx.fs.isVirtual && (ctx.fs instanceof VirtualFileSystem || ctx.fs instanceof SandboxFileSystem)) {
               await ctx.fs.mkdirp(dest);
-              const files = entries.filter((e) => !e.isDirectory).map((e) => ({ path: joinPath(dest, e.path), size: e.size }));
+              const vfs = ctx.fs instanceof SandboxFileSystem ? ctx.fs.base : ctx.fs;
+              const files: { path: string; size: number }[] = [];
+              const iniFiles: { path: string; bytes: Uint8Array }[] = [];
+              let iniBudget = DRY_RUN_INI_TOTAL_BYTES;
               for (const e of entries) if (e.isDirectory) await ctx.fs.mkdirp(joinPath(dest, e.path));
+              for (const e of entries) {
+                if (e.isDirectory) continue;
+                const target = joinPath(dest, e.path);
+                if (vfs instanceof VirtualFileSystem && isTslpatchdataIni(e.path) && e.size <= DRY_RUN_INI_MAX_BYTES && e.size <= iniBudget) {
+                  checkCancelled(ctx);
+                  try {
+                    const bytes = await reader.readEntry(e.path);
+                    if (bytes.byteLength <= DRY_RUN_INI_MAX_BYTES) {
+                      iniBudget -= bytes.byteLength;
+                      iniFiles.push({ path: target, bytes });
+                      continue;
+                    }
+                  } catch (readErr) {
+                    ctx.logger.debug(`dry run: cannot read "${e.path}" from "${archive}": ${readErr instanceof Error ? readErr.message : String(readErr)}`);
+                  }
+                }
+                files.push({ path: target, size: e.size });
+              }
               await ctx.fs.addVirtualFiles(files);
-              run.touch(...files.map((f) => f.path));
+              if (vfs instanceof VirtualFileSystem) {
+                for (const ini of iniFiles) {
+                  if (ctx.fs instanceof SandboxFileSystem) await ctx.fs.assertPath(ini.path);
+                  await vfs.addReadOnlyFile(ini.path, ini.bytes.byteLength, async () => ini.bytes);
+                }
+              }
+              run.touch(...files.map((f) => f.path), ...iniFiles.map((f) => f.path));
             }
             ctx.logger.info(`dry run: would extract "${archive}" (${entries.length} entries) to "${dest}"`);
           } else {
