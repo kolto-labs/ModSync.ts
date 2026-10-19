@@ -312,6 +312,10 @@ describe("parseNamespacesIni", () => {
       { key: "b", name: "Lite", iniName: "lite.ini" },
     ]);
   });
+  it("reads the data folder from DataPath, preferring it over the legacy DataFolderName", () => {
+    const text = "[Namespaces]\nNamespace0=a\nNamespace1=b\nNamespace2=c\n[a]\nIniName=a.ini\nDataPath=sub\\inner\n[b]\nIniName=b.ini\nDataFolderName=old\n[c]\nIniName=c.ini\nDataFolderName=old\nDataPath=new\n";
+    expect(parseNamespacesIni(text).map((n) => n.dataFolderName)).toEqual(["sub\\inner", "old", "new"]);
+  });
   it("fails on a listed namespace whose section is missing", () => {
     expect(() => parseNamespacesIni("[Namespaces]\nNamespace0=a\n")).toThrow(PatcherConfigError);
   });

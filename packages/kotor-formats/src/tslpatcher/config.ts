@@ -242,6 +242,11 @@ export interface Namespace {
   description?: string;
   iniName: string;
   infoName?: string;
+  /**
+   * Data folder of this namespace, relative to `tslpatchdata`. Read from
+   * `DataPath` (TSLPatcher/HoloPatcher key), falling back to the legacy
+   * `DataFolderName` key.
+   */
   dataFolderName?: string;
 }
 
@@ -810,7 +815,7 @@ export function parseNamespacesIni(text: string): Namespace[] {
     if (desc !== undefined) ns.description = desc;
     const info = sub.get("InfoName")?.trim();
     if (info) ns.infoName = info;
-    const data = sub.get("DataFolderName")?.trim();
+    const data = sub.get("DataPath")?.trim() || sub.get("DataFolderName")?.trim();
     if (data) ns.dataFolderName = data;
     out.push(ns);
   }

@@ -80,6 +80,91 @@ describe("patcher port", () => {
     expect(blocked.errors[0]).toContain("permission denied");
   });
 
+  describe("namespace data folders and ini precedence", () => {
+    const installIni = (file: string) => `[InstallList]\ninstall_folder0=Override\n\n[Override]\nFile0=${file}\n`;
+    const namespacesIni = (body: string) => `[Namespaces]\nNamespace0=first\n\n[first]\nName=First\n${body}`;
+    const dryRun = (dir: string, extra: { iniName?: string; namespaceIndex?: number } = { namespaceIndex: 0 }) =>
+      createPatcher({ ...sb.settings, patcherEngine: "Native" }, NullLogger).install({
+        tslpatchdataDir: `${sb.mods}/${dir}/tslpatchdata`,
+        gameDir: sb.kotor,
+        dryRun: true,
+        ...extra,
+      });
+
+    it("descends into the DataPath folder of the selected namespace", async () => {
+      const base = `${sb.mods}/dp/tslpatchdata`;
+      await writeText(`${base}/namespaces.ini`, namespacesIni("IniName=changes_1.ini\nDataPath=Variant_One\n"));
+      await writeText(`${base}/variant_one/changes_1.ini`, installIni("one.txt"));
+      await writeText(`${base}/variant_one/one.txt`, "1");
+      const r = await dryRun("dp");
+      expect(r.errors).toEqual([]);
+      expect(r.filesWritten).toEqual([`${sb.kotor}/Override/one.txt`]);
+    });
+
+    it("accepts nested DataPath values with backslash separators", async () => {
+      const base = `${sb.mods}/nested/tslpatchdata`;
+      await writeText(`${base}/namespaces.ini`, namespacesIni("IniName=full.ini\nDataPath=outer\\inner\n"));
+      await writeText(`${base}/outer/inner/full.ini`, installIni("deep.txt"));
+      await writeText(`${base}/outer/inner/deep.txt`, "d");
+      const r = await dryRun("nested");
+      expect(r.errors).toEqual([]);
+      expect(r.filesWritten).toEqual([`${sb.kotor}/Override/deep.txt`]);
+    });
+
+    it("still honors the legacy DataFolderName key, with DataPath preferred", async () => {
+      const base = `${sb.mods}/legacy/tslpatchdata`;
+      await writeText(`${base}/namespaces.ini`, namespacesIni("IniName=a.ini\nDataFolderName=old\n"));
+      await writeText(`${base}/old/a.ini`, installIni("old.txt"));
+      await writeText(`${base}/old/old.txt`, "o");
+      expect((await dryRun("legacy")).filesWritten).toEqual([`${sb.kotor}/Override/old.txt`]);
+      await writeText(`${base}/namespaces.ini`, namespacesIni("IniName=a.ini\nDataFolderName=old\nDataPath=new\n"));
+      await writeText(`${base}/new/a.ini`, installIni("new.txt"));
+      await writeText(`${base}/new/new.txt`, "n");
+      expect((await dryRun("legacy")).filesWritten).toEqual([`${sb.kotor}/Override/new.txt`]);
+    });
+
+    it("stays on the tslpatchdata root when DataPath is missing or escapes it", async () => {
+      const base = `${sb.mods}/fallback/tslpatchdata`;
+      await writeText(`${base}/changes.ini`, installIni("root.txt"));
+      await writeText(`${base}/root.txt`, "r");
+      for (const dataPath of ["absent", "..\\elsewhere", "."]) {
+        await writeText(`${base}/namespaces.ini`, namespacesIni(`IniName=changes.ini\nDataPath=${dataPath}\n`));
+        const r = await dryRun("fallback");
+        expect(r.errors, dataPath).toEqual([]);
+        expect(r.filesWritten, dataPath).toEqual([`${sb.kotor}/Override/root.txt`]);
+      }
+    });
+
+    it("uses the namespace ini when the requested ini does not exist", async () => {
+      const base = `${sb.mods}/guess/tslpatchdata`;
+      await writeText(`${base}/namespaces.ini`, namespacesIni("IniName=changes_b.ini\n"));
+      await writeText(`${base}/changes_b.ini`, installIni("b.txt"));
+      await writeText(`${base}/b.txt`, "b");
+      const r = await dryRun("guess", { namespaceIndex: 0, iniName: "changes_a.ini" });
+      expect(r.errors).toEqual([]);
+      expect(r.filesWritten).toEqual([`${sb.kotor}/Override/b.txt`]);
+    });
+
+    it("keeps the requested ini when it exists, even with a namespace selected", async () => {
+      const base = `${sb.mods}/explicit/tslpatchdata`;
+      await writeText(`${base}/namespaces.ini`, namespacesIni("IniName=changes_b.ini\n"));
+      await writeText(`${base}/changes_a.ini`, installIni("a.txt"));
+      await writeText(`${base}/changes_b.ini`, installIni("b.txt"));
+      await writeText(`${base}/a.txt`, "a");
+      await writeText(`${base}/b.txt`, "b");
+      const r = await dryRun("explicit", { namespaceIndex: 0, iniName: "changes_a.ini" });
+      expect(r.filesWritten).toEqual([`${sb.kotor}/Override/a.txt`]);
+    });
+
+    it("reports the namespace ini as missing when neither ini exists", async () => {
+      const base = `${sb.mods}/none/tslpatchdata`;
+      await writeText(`${base}/namespaces.ini`, namespacesIni("IniName=changes_b.ini\n"));
+      const r = await dryRun("none", { namespaceIndex: 0, iniName: "changes_a.ini" });
+      expect(r.ok).toBe(false);
+      expect(r.errors[0]).toContain(`changes ini not found: ${base}/changes_b.ini`);
+    });
+  });
+
   it("decodes windows-1252 and UTF-8 BOM inis", () => {
     expect(decodeIni(new Uint8Array([0x4e, 0xe9]))).toBe("Né");
     expect(decodeIni(new Uint8Array([0xef, 0xbb, 0xbf, 0x4e, 0xc3, 0xa9]))).toBe("Né");
