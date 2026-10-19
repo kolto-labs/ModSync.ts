@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Encapsulated, readEncapsulated, writeErf, writeRim } from "../erf.js";
-import { GffFieldType, type GffLocString, type GffStruct, addField, createGffRoot, createGffStruct, createLocString, getFieldByPath, readGff, writeGff } from "../gff.js";
+import { GffFieldType, type GffLocString, type GffStruct, addField, createGffRoot, createGffStruct, createLocString, getFieldByPath, getStructByPath, readGff, writeGff } from "../gff.js";
 import { ResourceTypes } from "../restypes.js";
 import { createSsf, readSsf, writeSsf } from "../ssf.js";
 import { Tlk, readTlk, writeTlk } from "../tlk.js";
@@ -389,6 +389,71 @@ describe("TslPatcher", () => {
     expect(patcher.memory.getStrRef(1)).toBe(4);
     expect(patcher.memory.get2da(0)).toBe("2");
     expect(await snapshot(tmp)).toEqual(before);
+  });
+
+  it("copies and assigns 2DAMEMORY tokens inside GFF and 2DA sections", async () => {
+    const ini = [
+      "[2DAList]",
+      "File0=spells.2da",
+      "[spells.2da]",
+      "ChangeRow0=c",
+      "[c]",
+      "RowIndex=0",
+      "2DAMEMORY21=RowIndex",
+      "2DAMEMORY22=2DAMEMORY21",
+      "[GFFList]",
+      "File0=p_test.utc",
+      "[p_test.utc]",
+      "AddField0=src",
+      "AddField1=dst",
+      "AddField2=item",
+      "2DAMEMORY2=2DAMEMORY1",
+      "2DAMEMORY3=2DAMEMORY1",
+      "2DAMEMORY9=2DAMEMORY8",
+      "2DAMEMORY1=9",
+      "[src]",
+      "FieldType=Word",
+      "Label=SrcVal",
+      "Value=7",
+      "2DAMEMORY1=!FieldPath",
+      "[dst]",
+      "FieldType=Word",
+      "Label=DstVal",
+      "Value=0",
+      "2DAMEMORY2=!FieldPath",
+      "[item]",
+      "FieldType=Struct",
+      "Path=FeatList",
+      "Label=",
+      "TypeId=ListIndex",
+      "2DAMEMORY8=ListIndex",
+      "",
+    ].join("\n");
+    const patcher = new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs(), backupDir: path.join(modDir, "b") });
+    const log = await patcher.apply(parseChangesIni(ini));
+    expect(log.errors).toEqual([]);
+
+    expect(patcher.memory.get2da(22)).toBe("0");
+    expect(patcher.memory.isFieldPath(22)).toBe(false);
+
+    const utc = readGff(await fsp.readFile(path.join(gameDir, "Override", "p_test.utc")));
+    expect(getFieldByPath(utc, "DstVal")?.value).toBe(7);
+    expect(getFieldByPath(utc, "SrcVal")?.value).toBe(9);
+    expect(getStructByPath(utc, "FeatList/1")?.id).toBe(1);
+    expect(patcher.memory.get2da(3)).toBe("SrcVal");
+    expect(patcher.memory.isFieldPath(3)).toBe(true);
+    expect(patcher.memory.get2da(9)).toBe("1");
+    expect(patcher.memory.isFieldPath(9)).toBe(false);
+  });
+
+  it("fails a memory assignment whose stored field path or source is unusable", async () => {
+    const run = async (name: string, body: string): Promise<string[]> => {
+      const ini = `[GFFList]\nFile0=p_test.utc\n[p_test.utc]\n${body}\n`;
+      const patcher = new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs(), backupDir: path.join(modDir, name) });
+      return (await patcher.apply(parseChangesIni(ini))).errors;
+    };
+    expect(await run("unset", "2DAMEMORY2=2DAMEMORY1")).toEqual([expect.stringMatching(/2DAMEMORY1 was never assigned/)]);
+    expect(await run("root", "2DAMEMORY1=!FieldPath\n2DAMEMORY2=!FieldPath\n2DAMEMORY1=2DAMEMORY2")).toEqual([expect.stringMatching(/does not point to a GFF field/)]);
   });
 
   it("reports unresolved tokens and missing files as errors without aborting other files", async () => {

@@ -150,6 +150,8 @@ export class TslPatcher {
 
   private log: PatcherLog = { errors: [], warnings: [], infos: [], unverified: [], filesWritten: [], filesBackedUp: [], mutationPlan: { mode: "applied", complete: false, mutations: [], unsupported: [] } };
   private mem = new PatcherMemory();
+  /** root of the GFF being patched; lets `2DAMEMORY<N>` values holding a field path resolve to that field's value */
+  private gffScope: GffRoot | undefined;
   private readonly dirCache = new Map<string, string[]>();
   private readonly archives = new Map<string, Encapsulated>();
   private readonly placeholderArchives = new Set<string>();
@@ -616,8 +618,11 @@ export class TslPatcher {
         return v.value;
       case "strref":
         return String(this.mem.getStrRef(v.token));
-      case "2damemory":
-        return this.mem.get2da(v.token);
+      case "2damemory": {
+        const stored = this.mem.get2da(v.token);
+        if (this.gffScope && this.mem.isFieldPath(v.token)) return this.readStoredFieldPath(this.gffScope, stored, v.token);
+        return stored;
+      }
       case "high":
         throw new PatcherFileError("high() is only valid as a 2DA cell value");
     }
@@ -787,6 +792,7 @@ export class TslPatcher {
       let value: string;
       if (s.source.kind === "rowIndex") value = String(index);
       else if (s.source.kind === "rowLabel") value = table.getRow(index)!.label;
+      else if (s.source.kind === "value") value = this.resolveValue(s.source.value);
       else {
         if (!table.hasColumn(s.source.column)) throw new PatcherFileError(`[${section}] cannot store column "${s.source.column}": not in ${filename}`);
         value = table.getCell(index, s.source.column) ?? "";
@@ -888,7 +894,12 @@ export class TslPatcher {
     const { data, source, dest } = await this.loadTarget(cfg);
     const root = readGff(data);
     this.logger.debug(`GFFList: ${cfg.filename} loaded from ${source}`);
-    for (const m of cfg.modifiers) this.applyGffModifier(root, m, cfg.filename);
+    this.gffScope = root;
+    try {
+      for (const m of cfg.modifiers) this.applyGffModifier(root, m, cfg.filename);
+    } finally {
+      this.gffScope = undefined;
+    }
     await this.saveTarget(cfg, dest, writeGff(root));
   }
 
@@ -906,7 +917,11 @@ export class TslPatcher {
 
   private applyGffModifier(root: GffRoot, m: GffModifier, filename: string): void {
     if (m.kind === "storePath") {
-      this.mem.set2da(m.token, "");
+      this.mem.setFieldPath(m.token, "");
+      return;
+    }
+    if (m.kind === "memoryAssign") {
+      this.assignGffMemory(root, m.token, m.source, filename);
       return;
     }
     if (m.kind === "add") {
@@ -924,6 +939,38 @@ export class TslPatcher {
       return;
     }
     field.value = this.coerceGffValue(this.resolveValue(m.value), field.type, field.value, `${filename} ${p}`);
+  }
+
+  /** Value of the GFF field a stored `!FieldPath` token points at, in the string form `coerceGffValue` accepts. */
+  private readStoredFieldPath(root: GffRoot, storedPath: string, token: number): string {
+    const field = getFieldByPath(root, storedPath);
+    if (!field) throw new PatcherFileError(`2DAMEMORY${token}: stored field path "${storedPath}" does not point to a GFF field`);
+    const v = field.value;
+    if (typeof v === "number" || typeof v === "bigint") return String(v);
+    if (typeof v === "string") return v;
+    if (v instanceof Uint8Array) return Array.from(v, (b) => b.toString(16).padStart(2, "0")).join("");
+    if (Array.isArray(v) || "fields" in v) throw new PatcherFileError(`2DAMEMORY${token}: stored field path "${storedPath}" points to a ${GffFieldType[field.type]}, which has no scalar value`);
+    if ("substrings" in v) return String(v.strref);
+    if ("w" in v) return `${v.x}|${v.y}|${v.z}|${v.w}`;
+    return `${v.x}|${v.y}|${v.z}`;
+  }
+
+  /**
+   * `2DAMEMORY<token>=2DAMEMORY<source>` (TSLPatcher/HoloPatcher Memory2DAModifierGFF). If `token` holds a
+   * stored field path, the (dereferenced) value of `source` is written into that field; otherwise `token`
+   * becomes a copy of `source`.
+   */
+  private assignGffMemory(root: GffRoot, token: number, source: number, filename: string): void {
+    if (!this.mem.isFieldPath(token)) {
+      this.mem.copy2da(token, source);
+      this.logger.debug(`${filename}: 2DAMEMORY${token} = 2DAMEMORY${source}`);
+      return;
+    }
+    const destPath = this.mem.get2da(token);
+    const field = getFieldByPath(root, destPath);
+    if (!field) throw new PatcherFileError(`${filename}: 2DAMEMORY${token}: stored field path "${destPath}" does not point to a GFF field`);
+    const raw = this.resolveValue({ kind: "2damemory", token: source });
+    field.value = this.coerceGffValue(raw, field.type, field.value, `${filename} ${destPath}`);
   }
 
   private coerceGffValue(raw: string, type: GffFieldType, existing: GffValue | undefined, what: string): GffValue {
@@ -1005,7 +1052,7 @@ export class TslPatcher {
     let newPath: string;
     if (parentList) {
       if (add.fieldType !== GffFieldType.Struct) throw new PatcherFileError(`${what}: only Struct fields can be added to the list "${parentPath}"`);
-      const s = createGffStruct(add.typeId);
+      const s = createGffStruct(add.typeIdFromListIndex ? parentList.length : add.typeId);
       parentList.push(s);
       const index = parentList.length - 1;
       newPath = `${parentPath}/${index}`;
@@ -1032,7 +1079,8 @@ export class TslPatcher {
         else this.warn(`${what}: ListIndex requested but "${newPath}" is not a list element`);
       }
     }
-    for (const t of add.storeFieldPath) this.mem.set2da(t, newPath);
+    for (const t of add.storeFieldPath) this.mem.setFieldPath(t, newPath);
+    for (const c of add.copyMemory) this.assignGffMemory(root, c.token, c.source, filename);
     for (const child of add.children) this.applyAddField(root, child, newPath, filename);
   }
 

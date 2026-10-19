@@ -189,6 +189,8 @@ INI conventions: sections `[Name]`, `Key=Value`, `;` comments. Keys are case-ins
 
 Two token pools persist across sections: `StrRef<N>` (TLK memory: N -> dialog.tlk index) and `2DAMEMORY<N>` (2DA memory: N -> string, usually a row index; can also hold a GFF field path via `!FieldPath`). Any value field in later sections may be the literal token name (`StrRef5`, `2DAMEMORY3`) and is substituted; using an undefined token is an error.
 
+In a GFF section `2DAMEMORY<N>=2DAMEMORY<M>` copies token M into token N; if N currently holds a stored field path (`!FieldPath`) the value of M (dereferenced when M is a field path too) is written into that field instead. `2DAMEMORY<N>=<value>` (any other value) writes `<value>` to the field whose path is stored in N. In a 2DA row section `2DAMEMORY<N>=2DAMEMORY<M>`/`StrRef<M>` copies the token value.
+
 ### [Settings]
 `WindowCaption`, `ConfirmMessage`, `LogLevel` (0 none, 1 errors, 2 general, 3 warnings, 4 verbose), `InstallerMode`, `BackupFiles`, `PlaintextLog`, `LookupGameFolder`, `LookupGameNumber` (1 KOTOR, 2 TSL), `SaveProcessedScripts`, `Required`/`Required<N>` (comma list of files that must exist in Override) with `RequiredMsg`/`RequiredMsg<N>`, `FileExists`, `IgnoreExtensions`.
 
@@ -209,6 +211,7 @@ Replace0=bar.utc       ; overwrite
 The files of `install_folder<N>` are listed in the section named by the key (`[install_folder<N>]`); the value is the destination. A section named after the value is accepted as a fallback. Folder values are paths relative to the game dir. If the destination is an archive path (`Modules\danm13.mod`, `.rim`, `.erf`, `.sav`) the file is inserted into that archive (Replace overwriting an existing entry). Optional per-file section `[foo.uti]`: `!SourceFolder`, `!SaveAs`/`!Filename`, `!Destination`, `!ReplaceFile`. `!OverrideType` (`ignore` default | `warn` | `rename`): what to do if a file being installed into a module also exists in Override; rename renames the Override copy to `.bak`.
 
 ### [2DAList]
+The key of a list entry is an opaque identifier (`Table<N>`, `File<N>`, `Replace<N>`, ...; entries are ordered by their numeric suffix, and a key starting with `Replace` replaces); the value is the file name. The same holds for every file list ([InstallList] file sections, [GFFList], [CompileList], [HACKList], [SSFList]).
 ```
 [2DAList]
 Table0=spells.2da
@@ -247,11 +250,12 @@ FirstName(lang0)=Bastila     ; set substring id 0
 ClassList/0/Class=5          ; path modify: labels separated by '/', list elements by index
 AddField0=add_feat
 2DAMEMORY4=!FieldPath
+2DAMEMORY6=2DAMEMORY4        ; copy token / write token value into the field stored in 6
 [add_feat]
 FieldType=Struct
 Path=FeatList                ; parent (empty = root). For a List parent, the struct is appended
 Label=
-TypeId=1
+TypeId=1                     ; or ListIndex: the struct's type id is its index in the list
 2DAMEMORY5=ListIndex
 AddField0=add_feat_id
 [add_feat_id]

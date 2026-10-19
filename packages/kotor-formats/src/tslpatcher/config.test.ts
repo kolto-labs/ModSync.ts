@@ -326,3 +326,94 @@ describe("parseNamespacesIni", () => {
     expect(parseNamespacesIni("; only a comment\n[Variant]\nName=Orphan\n")).toEqual([]);
   });
 });
+
+describe("parseChangesIni identifier and memory-assignment leniency", () => {
+  it("accepts File<N>, Table<N> and Replace<N> in [2DAList], ordered together by suffix", () => {
+    const { twoda } = parseChangesIni("[2DAList]\nFile2=c.2da\nTable0=a.2da\nReplace1=b.2da\n[a.2da]\n[b.2da]\n[c.2da]\n");
+    expect(twoda.map((t) => [t.filename, t.replaceFile])).toEqual([
+      ["a.2da", false],
+      ["b.2da", true],
+      ["c.2da", false],
+    ]);
+  });
+
+  it("treats list keys as opaque identifiers; Replace-prefixed keys replace", () => {
+    const ini = "[GFFList]\nEntry0=a.utc\nReplaceEntry1=b.utc\n[a.utc]\n[b.utc]\n[InstallList]\nfolder0=Override\n[folder0]\nItem0=x.uti\nReplaceItem1=y.uti\n";
+    const { gff, install } = parseChangesIni(ini);
+    expect(gff.map((g) => [g.filename, g.replaceFile])).toEqual([
+      ["a.utc", false],
+      ["b.utc", true],
+    ]);
+    expect(install[0]!.files.map((f) => [f.filename, f.replaceExisting])).toEqual([
+      ["x.uti", false],
+      ["y.uti", true],
+    ]);
+  });
+
+  it("still rejects list entries without a file name or section", () => {
+    expect(() => parseChangesIni("[2DAList]\nFile0=\n")).toThrow(/\[2DAList\] File0: empty file name/);
+    expect(() => parseChangesIni("[2DAList]\nstray line\n")).toThrow(PatcherConfigError);
+    expect(() => parseChangesIni("[2DAList]\nFile0=a.2da\n")).toThrow(/no \[a\.2da\] section/);
+    expect(() => parseChangesIni("[InstallList]\nstray=Override\n")).toThrow(/\[stray\] which does not exist/);
+  });
+
+  const gffFile = (body: string): string => `[GFFList]\nFile0=a.utc\n[a.utc]\n${body}\n`;
+
+  it("parses 2DAMEMORY<N> assignments in a GFF file section", () => {
+    const g = parseChangesIni(gffFile("2DAMEMORY1=!FieldPath\n2DAMEMORY4=2DAMEMORY3\n2DAMEMORY5=12\nTag=x")).gff[0]!;
+    expect(g.modifiers).toEqual([
+      { kind: "storePath", token: 1 },
+      { kind: "memoryAssign", token: 4, source: 3 },
+      { kind: "modify", path: "2DAMEMORY5", value: { kind: "constant", value: "12" } },
+      { kind: "modify", path: "Tag", value: { kind: "constant", value: "x" } },
+    ]);
+    const viaToken = parseChangesIni(gffFile("2DAMEMORY5=StrRef2\n2DAMEMORY6(strref)=7")).gff[0]!;
+    expect(viaToken.modifiers).toEqual([
+      { kind: "modify", path: "2DAMEMORY5", value: { kind: "strref", token: 2 } },
+      { kind: "modify", path: "2DAMEMORY6", part: { kind: "strref" }, value: { kind: "constant", value: "7" } },
+    ]);
+  });
+
+  it("rejects a StrRef<N> key in a GFF file section", () => {
+    expect(() => parseChangesIni(gffFile("StrRef4=2DAMEMORY3"))).toThrow(/unexpected key "StrRef4"/);
+  });
+
+  it("parses memory copies, ListIndex and TypeId=ListIndex in an AddField section", () => {
+    const ini = gffFile("AddField0=f") + "[f]\nFieldType=Struct\nPath=List\nTypeId=ListIndex\n2DAMEMORY1=ListIndex\n2DAMEMORY2=!FieldPath\n2DAMEMORY4=2DAMEMORY3\n";
+    const add = parseChangesIni(ini).gff[0]!.modifiers[0]!;
+    if (add.kind !== "add") throw new Error("expected add");
+    expect(add.typeIdFromListIndex).toBe(true);
+    expect(add.storeListIndex).toEqual([1]);
+    expect(add.storeFieldPath).toEqual([2]);
+    expect(add.copyMemory).toEqual([{ token: 4, source: 3 }]);
+  });
+
+  it("keeps malformed AddField memory assignments an error", () => {
+    const bad = gffFile("AddField0=f") + "[f]\nFieldType=Word\nLabel=X\nValue=1\n2DAMEMORY1=bogus\n";
+    expect(() => parseChangesIni(bad)).toThrow(/\[f\] 2DAMEMORY1/);
+    const badStrRef = gffFile("AddField0=f") + "[f]\nFieldType=Word\nLabel=X\nValue=1\n2DAMEMORY1=StrRef3\n";
+    expect(() => parseChangesIni(badStrRef)).toThrow(/\[f\] 2DAMEMORY1/);
+    const badTypeId = gffFile("AddField0=f") + "[f]\nFieldType=Struct\nTypeId=abc\n";
+    expect(() => parseChangesIni(badTypeId)).toThrow(/integer/);
+  });
+
+  it("parses a token copy as a 2DA memory store", () => {
+    const ini = "[2DAList]\nFile0=a.2da\n[a.2da]\nChangeRow0=c\n[c]\nRowIndex=0\n2DAMEMORY1=RowIndex\n2DAMEMORY2=2DAMEMORY1\n2DAMEMORY3=label\n";
+    const row = parseChangesIni(ini).twoda[0]!.modifiers[0]!;
+    if (row.kind !== "changeRow") throw new Error("expected changeRow");
+    expect(row.stores).toEqual([
+      { pool: "2damemory", token: 1, source: { kind: "rowIndex" } },
+      { pool: "2damemory", token: 2, source: { kind: "value", value: { kind: "2damemory", token: 1 } } },
+      { pool: "2damemory", token: 3, source: { kind: "column", column: "label" } },
+    ]);
+  });
+
+  it("accepts StrRef<N> spelled indices in TLK Append/Replace sections", () => {
+    const ini = "[TLKList]\nAppendFile0=extra.tlk\nReplaceFile0=extra.tlk\n[extra.tlk]\nStrRef5=StrRef2\n";
+    expect(parseChangesIni(ini).tlk.modifiers).toEqual([
+      { kind: "append", token: 5, sourceIndex: 2, sourceFile: "extra.tlk" },
+      { kind: "replace", dialogIndex: 5, sourceIndex: 2, sourceFile: "extra.tlk" },
+    ]);
+    expect(() => parseChangesIni("[TLKList]\nAppendFile0=extra.tlk\n[extra.tlk]\nStrRefX=1\n")).toThrow(/integer/);
+  });
+});
