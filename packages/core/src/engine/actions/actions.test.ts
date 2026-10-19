@@ -10,6 +10,8 @@ import type { UserPrompt, UserPromptAnswer } from "../../model/types.js";
 import { createInstallContext, type InstallContext } from "../context.js";
 import { computeSelection } from "../selection.js";
 import { G, file, instr, makeSandbox, mod, option, writeText, writeZip, type Sandbox } from "../testing.js";
+import { isTslpatchdataIni } from "./extract.js";
+import { listNamespaces } from "../patcherPort.js";
 import { executeInstruction, predictTouched, splitArguments } from "./index.js";
 
 let sb: Sandbox;
@@ -436,6 +438,69 @@ describe("streaming native extract action", () => {
     expect(result.code).toBe("Success");
     expect(read).not.toHaveBeenCalled();
     expect(await readFile(`${sb.mods}/Large/large.txt`, "utf8")).toBe(payload);
+  });
+});
+
+describe("dry-run Extract exposes tslpatchdata ini contents", () => {
+  const NAMESPACES = "[Namespaces]\nNamespace0=variant\n\n[variant]\nName=Variant\nIniName=changes_variant.ini\n";
+  const VARIANT_INI = "[InstallList]\n";
+
+  async function dryExtract(entries: Record<string, string | Uint8Array>): Promise<InstallContext> {
+    await writeZip(`${sb.mods}/Pack.zip`, entries);
+    const ctx = makeCtx("vfs");
+    const r = await executeInstruction(ctx, instr("Extract", { source: ["<<modDirectory>>/Pack.zip"] }), mod(1));
+    expect(r.code).toBe("Success");
+    return ctx;
+  }
+
+  it("matches .ini entries under a tslpatchdata path segment case-insensitively", () => {
+    expect(isTslpatchdataIni("tslpatchdata/namespaces.ini")).toBe(true);
+    expect(isTslpatchdataIni("Wrapper/TSLPatchData/Changes_X.INI")).toBe(true);
+    expect(isTslpatchdataIni("tslpatchdata/sub/other.ini")).toBe(true);
+    expect(isTslpatchdataIni("tslpatchdata/a.2da")).toBe(false);
+    expect(isTslpatchdataIni("readme.ini")).toBe(false);
+    expect(isTslpatchdataIni("tslpatchdata.ini")).toBe(false);
+    expect(isTslpatchdataIni("tslpatchdata")).toBe(false);
+  });
+
+  it("reads namespaces.ini and changes inis with real content after the dry run", async () => {
+    const ctx = await dryExtract({
+      "tslpatchdata/namespaces.ini": NAMESPACES,
+      "tslpatchdata/changes_variant.ini": VARIANT_INI,
+      "tslpatchdata/a.txt": "payload",
+    });
+    const dest = `${sb.mods}/Pack`;
+    expect(new TextDecoder().decode(await ctx.fs.readFile(`${dest}/tslpatchdata/namespaces.ini`))).toBe(NAMESPACES);
+    expect(new TextDecoder().decode(await ctx.fs.readFile(`${dest}/tslpatchdata/changes_variant.ini`))).toBe(VARIANT_INI);
+    expect(await exists(dest)).toBe(false);
+  });
+
+  it("drives the namespace-provided iniName and lets the Patcher find the variant ini", async () => {
+    const ctx = await dryExtract({
+      "tslpatchdata/namespaces.ini": NAMESPACES,
+      "tslpatchdata/changes_variant.ini": VARIANT_INI,
+    });
+    const namespaces = await listNamespaces(`${sb.mods}/Pack/tslpatchdata`, ctx.fs);
+    expect(namespaces?.map((n) => n.iniName)).toEqual(["changes_variant.ini"]);
+    const r = await executeInstruction(ctx, instr("Patcher", { source: ["<<modDirectory>>/Pack"] }), mod(1));
+    expect(r.code).toBe("Success");
+  });
+
+  it("keeps non-ini entries, inis outside tslpatchdata and oversized inis virtual", async () => {
+    const big = "k=v\n".repeat(300_000);
+    const ctx = await dryExtract({
+      "tslpatchdata/a.txt": "payload",
+      "tslpatchdata/big.ini": big,
+      "readme.ini": "[x]\n",
+      "Override/b.tga": "tga",
+    });
+    const dest = `${sb.mods}/Pack`;
+    for (const rel of ["tslpatchdata/a.txt", "tslpatchdata/big.ini", "readme.ini", "Override/b.tga"]) {
+      expect((await ctx.fs.readFile(`${dest}/${rel}`)).byteLength).toBe(0);
+      expect(await ctx.fs.exists(`${dest}/${rel}`)).toBe(true);
+    }
+    expect((await ctx.fs.stat(`${dest}/tslpatchdata/a.txt`))?.size).toBe("payload".length);
+    expect((await ctx.fs.stat(`${dest}/tslpatchdata/big.ini`))?.size).toBe(big.length);
   });
 });
 
