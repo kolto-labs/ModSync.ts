@@ -114,14 +114,40 @@ export function parseCategoryAndTier(text: string | null | undefined): { categor
   return { category: tier === "Unknown" ? normalizeCategories(raw) : category, tier };
 }
 
-/** Normalize the installation method vocabulary of the guides. */
+/** Script extensions a guide may name as the thing to run. */
+export type ScriptExtension = "bat" | "cmd" | "sh";
+
+export interface InstallationHints {
+  /** First `.bat` / `.cmd` / `.sh` named in the text. */
+  scriptExt?: ScriptExtension;
+  /** The text says the patcher must be run several times ("Multi-Run"). */
+  multiRun: boolean;
+}
+
+/** Pick out installation hints that the closed `InstallationMethod` set cannot carry. */
+export function detectInstallationHints(text: string | null | undefined): InstallationHints {
+  const lower = (text ?? "").toLowerCase();
+  const script = /\.(bat|cmd|sh)\b/.exec(lower);
+  return {
+    ...(script ? { scriptExt: script[1] as ScriptExtension } : {}),
+    multiRun: /multi[-\s]?run/.test(lower),
+  };
+}
+
+/**
+ * Normalize the installation method vocabulary of the guides. A method that
+ * names a `.bat`/`.cmd`/`.sh` script is an Executable even when it also says
+ * "Patcher" or "Loose-File" (the script is what gets run). "Multi-Run" patcher
+ * methods stay TSLPatcher/HoloPatcher; see `detectInstallationHints`.
+ */
 export function normalizeInstallationMethod(text: string | null | undefined): InstallationMethod {
   if (!text) return "Unknown";
   const lower = text.toLowerCase();
+  if (/\bmixed\b/.test(lower)) return "Mixed";
+  if (detectInstallationHints(lower).scriptExt) return "Executable";
   const patcher = /tsl\s*patcher|holo\s*patcher|patcher/.test(lower);
   const loose = /loose|drag|override|manual/.test(lower);
   const exe = /\.exe\b|installer|executable|self[- ]?extract/.test(lower);
-  if (/\bmixed\b/.test(lower)) return "Mixed";
   if ([patcher, loose, exe].filter(Boolean).length > 1) return "Mixed";
   if (/holo\s*patcher/.test(lower)) return "HoloPatcher";
   if (patcher) return "TSLPatcher";

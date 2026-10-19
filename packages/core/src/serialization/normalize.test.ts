@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeActionType,
   normalizeCategories,
+  detectInstallationHints,
   normalizeInstallationMethod,
   normalizeTargetGame,
   normalizeTier,
@@ -72,6 +73,27 @@ describe("normalizeInstallationMethod", () => {
     expect(normalizeInstallationMethod("TSLPatcher + Loose-File")).toBe("Mixed");
     expect(normalizeInstallationMethod("Mixed")).toBe("Mixed");
     expect(normalizeInstallationMethod("")).toBe("Unknown");
+  });
+  it("maps methods naming a .bat/.cmd/.sh script to Executable before the patcher test", () => {
+    expect(normalizeInstallationMethod(".bat Patcher with Loose-File Components")).toBe("Executable");
+    expect(normalizeInstallationMethod("Patcher (.cmd)")).toBe("Executable");
+    expect(normalizeInstallationMethod(".bat Patcher / .sh script")).toBe("Executable");
+    expect(normalizeInstallationMethod("TSLPatcher + Loose-File")).toBe("Mixed");
+    expect(normalizeInstallationMethod("Mixed (.bat)")).toBe("Mixed");
+    expect(normalizeInstallationMethod("Patcher for .battle files")).toBe("TSLPatcher");
+  });
+  it("keeps Multi-Run patcher methods as patchers", () => {
+    expect(normalizeInstallationMethod("TSLPatcher (Multi-Run)")).toBe("TSLPatcher");
+    expect(normalizeInstallationMethod("HoloPatcher (Multi Run)")).toBe("HoloPatcher");
+  });
+});
+
+describe("detectInstallationHints", () => {
+  it("finds script extensions and multi-run wording", () => {
+    expect(detectInstallationHints("Run install.bat")).toEqual({ scriptExt: "bat", multiRun: false });
+    expect(detectInstallationHints("Run it.SH twice")).toEqual({ scriptExt: "sh", multiRun: false });
+    expect(detectInstallationHints("TSLPatcher (Multi-Run)")).toEqual({ multiRun: true });
+    expect(detectInstallationHints(undefined)).toEqual({ multiRun: false });
   });
 });
 
