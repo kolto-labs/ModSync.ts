@@ -722,8 +722,13 @@ function parseAddField(ini: IniDocument, section: IniSection, depth: number): Gf
   return add;
 }
 
+export function normalizeGffLangSubstringId(id: number): { id: number; adjusted: boolean } {
+  if (id >= 0) return { id, adjusted: false };
+  return { id: ((id % 2) + 2) % 2, adjusted: true };
+}
+
 function parseGffModifyKey(key: string): { path: string; part?: GffLocStringPart } {
-  const m = /^(.*)\((strref|lang(\d+))\)$/i.exec(key.trim());
+  const m = /^(.*)\((strref|lang(-?\d+))\)$/i.exec(key.trim());
   const norm = (p: string): string => p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
   if (!m) return { path: norm(key) };
   const path = norm(m[1]!);

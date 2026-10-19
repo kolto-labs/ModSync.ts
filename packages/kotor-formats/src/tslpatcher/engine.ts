@@ -27,24 +27,25 @@ import { splitResourceName } from "../restypes.js";
 import { readSsf, writeSsf } from "../ssf.js";
 import { Tlk, readTlk, writeTlk } from "../tlk.js";
 import { TwoDA, read2da, write2da, type TwoDARowMatch } from "../twoda.js";
-import type {
-  CompileFileConfig,
-  GffAddField,
-  GffFileConfig,
-  GffModifier,
-  HackFileConfig,
-  InstallFolderConfig,
-  OverrideType,
-  PatchFileCommon,
-  PatcherConfig,
-  PatcherSettings,
-  PatcherValue,
-  RowTarget,
-  SsfFileConfig,
-  TlkListConfig,
-  TwoDAFileConfig,
-  TwoDAModifier,
-  TwoDAStore,
+import {
+  type CompileFileConfig,
+  type GffAddField,
+  type GffFileConfig,
+  type GffModifier,
+  type HackFileConfig,
+  type InstallFolderConfig,
+  type OverrideType,
+  type PatchFileCommon,
+  type PatcherConfig,
+  type PatcherSettings,
+  type PatcherValue,
+  type RowTarget,
+  type SsfFileConfig,
+  type TlkListConfig,
+  type TwoDAFileConfig,
+  type TwoDAModifier,
+  type TwoDAStore,
+  normalizeGffLangSubstringId,
 } from "./config.js";
 import { NullPatcherLogger, type PatcherFs, type PatcherLogger } from "./fs.js";
 import { PatcherMemory, PatcherTokenError, parseToken, substituteTokenPlaceholders } from "./memory.js";
@@ -1143,7 +1144,13 @@ export class TslPatcher {
       if (field.type !== GffFieldType.LocString) throw new PatcherFileError(`${filename}: "${p}" is not an ExoLocString`);
       const ls = field.value as GffLocString;
       if (m.part.kind === "strref") ls.strref = this.resolveInt(m.value, `${filename} ${p}(strref)`);
-      else ls.substrings.set(m.part.id, this.resolveValue(m.value));
+      else {
+        const target = normalizeGffLangSubstringId(m.part.id);
+        if (target.adjusted) {
+          this.warnOnce(`${filename} ${p}(lang${m.part.id}): negative language id is not a valid substring id; HoloPatcher treats it as English, writing substring ${target.id}`);
+        }
+        ls.substrings.set(target.id, this.resolveValue(m.value));
+      }
       return;
     }
     field.value = this.coerceGffValue(this.resolveValue(m.value), field.type, field.value, `${filename} ${p}`);
