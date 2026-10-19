@@ -152,6 +152,7 @@ export class TslPatcher {
   private mem = new PatcherMemory();
   private readonly dirCache = new Map<string, string[]>();
   private readonly archives = new Map<string, Encapsulated>();
+  private readonly placeholderArchives = new Set<string>();
   private readonly overlay = new Map<string, Uint8Array>();
   private readonly touched = new Set<string>();
   private createdFiles: string[] = [];
@@ -178,6 +179,7 @@ export class TslPatcher {
     this.createdFiles = [];
     this.backupOutputsPlanned = false;
     this.archives.clear();
+    this.placeholderArchives.clear();
     this.overlay.clear();
     this.dirCache.clear();
     this.backupEnabled = config.settings.backupFiles;
@@ -336,10 +338,14 @@ export class TslPatcher {
    */
   private requireBytes(data: Uint8Array, filename: string, origin: string): Uint8Array {
     if (data.byteLength > 0) return data;
-    if (this.dryRun && this.fs.isVirtual === true) {
+    if (this.isVirtualDryRun()) {
       throw new VirtualPlaceholderNotice(`dry run: ${filename} (${origin}) is a zero-byte virtual placeholder; content patch not verified`);
     }
     throw new PatcherFileError(`${filename}: ${origin} is empty (0 bytes)`);
+  }
+
+  private isVirtualDryRun(): boolean {
+    return this.dryRun && this.fs.isVirtual === true;
   }
 
   private async readAbs(abs: string): Promise<Uint8Array | undefined> {
@@ -353,7 +359,12 @@ export class TslPatcher {
     let enc = this.archives.get(abs);
     if (enc) return enc;
     const data = await this.readAbs(abs);
-    if (data) enc = readEncapsulated(data);
+    if (data && data.byteLength === 0 && this.isVirtualDryRun()) {
+      const type = encapsulatedFileTypeFromPath(abs) ?? "ERF ";
+      enc = new Encapsulated(type);
+      this.placeholderArchives.add(abs);
+      this.unverified(`dry run: ${path.basename(abs)} (${abs}) is a zero-byte virtual placeholder archive; treated as an empty ${type.trim()} container, its existing contents are not verified`);
+    } else if (data) enc = readEncapsulated(this.requireBytes(data, path.basename(abs), "archive"));
     else if (createIfMissing) {
       const type = encapsulatedFileTypeFromPath(abs) ?? "ERF ";
       enc = new Encapsulated(type);
@@ -370,20 +381,24 @@ export class TslPatcher {
   }
 
   /** Read a game file (folder destination) or archive resource; undefined when absent. */
-  private async readGameResource(dest: Destination, filename: string): Promise<Uint8Array | undefined> {
+  private async readGameResource(dest: Destination, filename: string, absentInPlaceholder = false): Promise<Uint8Array | undefined> {
     if (dest.isArchive) {
       const abs = (await this.gamePath(dest.rel)).path;
       const enc = await this.loadArchive(abs, false);
       if (!enc) return undefined;
       const { resref, type } = this.resourceKey(filename);
-      return enc.get(resref, type)?.data;
+      const found = enc.get(resref, type)?.data;
+      if (!found && !absentInPlaceholder && this.placeholderArchives.has(abs)) {
+        throw new VirtualPlaceholderNotice(`dry run: ${filename} cannot be read from ${dest.rel}, a zero-byte virtual placeholder archive; content patch not verified`);
+      }
+      return found;
     }
     const r = await this.gamePath(`${dest.rel}/${filename}`);
     return this.readAbs(r.path);
   }
 
   private async gameResourceExists(dest: Destination, filename: string): Promise<boolean> {
-    return (await this.readGameResource(dest, filename)) !== undefined;
+    return (await this.readGameResource(dest, filename, true)) !== undefined;
   }
 
   /** Write a game file or archive resource, backing up first. */
@@ -591,21 +606,26 @@ export class TslPatcher {
       return;
     }
     const dialog = readTlk(this.requireBytes(data, "dialog.tlk", target.path), { warn: (m) => this.warn(m) });
-    const sources = new Map<string, Tlk>();
-    const loadSource = async (name: string): Promise<Tlk> => {
+    const sources = new Map<string, Tlk | undefined>();
+    const loadSource = async (name: string): Promise<Tlk | undefined> => {
       const key = name.toLowerCase();
-      let tlk = sources.get(key);
-      if (!tlk) {
-        const src = await this.findSource(name, cfg.sourceFolder);
-        if (!src) throw new PatcherFileError(`TLKList: ${name} not found in tslpatchdata`);
-        tlk = readTlk(await this.fs.readFile(src), { warn: (m) => this.warn(m) });
-        sources.set(key, tlk);
+      if (sources.has(key)) return sources.get(key);
+      const src = await this.findSource(name, cfg.sourceFolder);
+      if (!src) throw new PatcherFileError(`TLKList: ${name} not found in tslpatchdata`);
+      let tlk: Tlk | undefined;
+      try {
+        tlk = readTlk(this.requireBytes(await this.fs.readFile(src), name, "tslpatchdata"), { warn: (m) => this.warn(m) });
+      } catch (err) {
+        if (!(err instanceof VirtualPlaceholderNotice)) throw err;
+        this.unverified(`TLKList: ${err.message}; its entries are added as blank text to keep StrRef numbering`);
       }
+      sources.set(key, tlk);
       return tlk;
     };
     const entryOf = async (file: string | undefined, index: number): Promise<{ text: string; sound: string; soundLength?: number }> => {
       const name = file ?? cfg.sourceFile;
       const tlk = await loadSource(name);
+      if (!tlk) return { text: "", sound: "" };
       const e = tlk.entries[index];
       if (!e) throw new PatcherFileError(`TLKList: ${name} has no entry ${index} (${tlk.entries.length} entries)`);
       return { text: e.text, sound: e.soundResRef, ...(e.soundLength === undefined ? {} : { soundLength: e.soundLength }) };
@@ -990,8 +1010,13 @@ export class TslPatcher {
       throw new PatcherFileError(`script compilation unavailable: ${cfg.filename} requires a compiler or precompiled ${ncsName} in tslpatchdata`);
     }
     const source = await this.findSource(cfg.filename, cfg.sourceFolder);
-    if (source && /#(?:2DAMEMORY|StrRef)\d+#/i.test(decodeCp1252(await this.fs.readFile(source)))) {
-      throw new PatcherFileError(`${cfg.filename} contains memory substitutions requiring source compilation; cannot use precompiled ${ncsName}`);
+    if (source) {
+      const script = await this.fs.readFile(source);
+      if (script.byteLength === 0 && this.isVirtualDryRun()) {
+        this.unverified(`CompileList ${cfg.filename}: dry run: ${cfg.filename} (tslpatchdata) is a zero-byte virtual placeholder; memory substitution check not verified`);
+      } else if (/#(?:2DAMEMORY|StrRef)\d+#/i.test(decodeCp1252(script))) {
+        throw new PatcherFileError(`${cfg.filename} contains memory substitutions requiring source compilation; cannot use precompiled ${ncsName}`);
+      }
     }
     this.warn(`CompileList: ${cfg.filename} installed from precompiled ${ncsName} (compiled from precompiled ncs, not from source)`);
     const dest = this.parseDestination(cfg.destination);

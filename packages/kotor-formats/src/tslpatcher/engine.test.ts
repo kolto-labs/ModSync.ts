@@ -418,6 +418,85 @@ describe("TslPatcher", () => {
       expect(log.filesWritten).toEqual([]);
     });
 
+    it("dry run installs into a zero-byte virtual placeholder archive as an empty container", async () => {
+      const archive = path.join(gameDir, "Modules", "placeholder_a.mod");
+      await fsp.writeFile(archive, new Uint8Array(0));
+      const config = parseChangesIni(`[InstallList]\ninstall_folder0=Modules\\placeholder_a.mod\n[Modules\\placeholder_a.mod]\nFile0=new_item.uti`);
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true }).apply(config);
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toHaveLength(1);
+      expect(log.unverified[0]).toMatch(/placeholder_a\.mod.*zero-byte virtual placeholder archive.*empty MOD/);
+      expect(log.filesWritten).toEqual([archive]);
+      expect((await fsp.stat(archive)).size).toBe(0);
+    });
+
+    it("dry run reports a patch target inside a zero-byte virtual placeholder archive as unverified", async () => {
+      await fsp.writeFile(path.join(gameDir, "Modules", "placeholder_a.mod"), new Uint8Array(0));
+      const config = parseChangesIni(`[2DAList]\nTable0=table_a.2da\n[table_a.2da]\n!Destination=Modules\\placeholder_a.mod\nChangeRow0=row_fix\n[row_fix]\nRowIndex=0\nlabel=changed`);
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true }).apply(config);
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toHaveLength(2);
+      expect(log.unverified.join("\n")).toMatch(/table_a\.2da cannot be read from Modules\/placeholder_a\.mod/);
+      expect(log.filesWritten).toEqual([]);
+    });
+
+    it("dry run keeps resources installed earlier in the same run visible inside a placeholder archive", async () => {
+      await fsp.writeFile(path.join(gameDir, "Modules", "placeholder_a.mod"), new Uint8Array(0));
+      const config = parseChangesIni(
+        `[InstallList]\ninstall_folder0=Modules\\placeholder_a.mod\n[Modules\\placeholder_a.mod]\nFile0=new_item.uti\n[GFFList]\nFile0=new_item.uti\n[new_item.uti]\n!Destination=Modules\\placeholder_a.mod\nTag=patched`,
+      );
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true }).apply(config);
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toHaveLength(1);
+    });
+
+    it("real run and real-fs dry run fail hard on a zero-byte archive and name the file", async () => {
+      await fsp.writeFile(path.join(gameDir, "Modules", "placeholder_a.mod"), new Uint8Array(0));
+      const config = parseChangesIni(`[InstallList]\ninstall_folder0=Modules\\placeholder_a.mod\n[Modules\\placeholder_a.mod]\nFile0=new_item.uti`);
+      for (const [fs, dryRun] of [
+        [new PlaceholderNodeFs(), false],
+        [new NodePatcherFs(), true],
+      ] as const) {
+        const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs, dryRun, backupDir: path.join(modDir, "backup", "zero") }).apply(config);
+        expect(log.unverified).toEqual([]);
+        expect(log.errors.join("\n")).toMatch(/placeholder_a\.mod: archive is empty \(0 bytes\)/);
+        expect(log.errors.join("\n")).not.toMatch(/ErfError|archive too small/);
+      }
+    });
+
+    it("dry run reports a zero-byte tslpatchdata TLK source as unverified and keeps StrRef numbering", async () => {
+      await fsp.writeFile(path.join(dataDir, "append.tlk"), new Uint8Array(0));
+      const config = parseChangesIni(`[TLKList]\nStrRef0=0\nStrRef1=1\n[2DAList]\nTable0=spells.2da\n[spells.2da]\nChangeRow0=fix\n[fix]\nRowIndex=0\nname=StrRef1`);
+      const patcher = new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true });
+      const log = await patcher.apply(config);
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toHaveLength(1);
+      expect(log.unverified[0]).toMatch(/append\.tlk.*zero-byte virtual placeholder/);
+      expect(patcher.memory.getStrRef(0)).toBe(3);
+      expect(patcher.memory.getStrRef(1)).toBe(4);
+    });
+
+    it("real run and real-fs dry run fail hard on a zero-byte tslpatchdata TLK source", async () => {
+      await fsp.writeFile(path.join(dataDir, "append.tlk"), new Uint8Array(0));
+      for (const [fs, dryRun] of [
+        [new PlaceholderNodeFs(), false],
+        [new NodePatcherFs(), true],
+      ] as const) {
+        const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs, dryRun, backupDir: path.join(modDir, "backup", "zero") }).apply(parseChangesIni(`[TLKList]\nStrRef0=0\n`));
+        expect(log.unverified).toEqual([]);
+        expect(log.errors.join("\n")).toMatch(/append\.tlk: tslpatchdata is empty \(0 bytes\)/);
+        expect(log.errors.join("\n")).not.toMatch(/TLK too small/);
+      }
+    });
+
+    it("dry run flags a zero-byte script source whose memory substitutions cannot be checked", async () => {
+      await fsp.writeFile(path.join(dataDir, "present.nss"), new Uint8Array(0));
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true }).apply(parseChangesIni(`[CompileList]\nFile0=present.nss\n`));
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toHaveLength(1);
+      expect(log.unverified[0]).toMatch(/present\.nss.*zero-byte virtual placeholder/);
+    });
+
     it("real run fails on a zero-byte game dialog.tlk", async () => {
       await fsp.writeFile(path.join(gameDir, "dialog.tlk"), new Uint8Array(0));
       const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(parseChangesIni(`[TLKList]\nStrRef0=0\n`));
