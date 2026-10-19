@@ -132,7 +132,12 @@ export function requireDestination(instruction: Instruction): string {
   return dest;
 }
 
-/** Every path pair a transfer of `sources` into `destDir` would produce. */
+/**
+ * Every path pair a transfer of `sources` into `destDir` would produce. A source
+ * directory named like `destDir` (an archive's top-level `Override/` moved into
+ * `<game>/Override`) merges straight into `destDir` instead of nesting
+ * `Override/Override`.
+ */
 export async function planTransfer(
   ctx: InstallContext,
   sources: readonly string[],
@@ -146,7 +151,8 @@ export async function planTransfer(
       plan.push({ from: src, to: joinPath(destDir, baseName(src)), isDirectory: false });
       continue;
     }
-    const root = joinPath(destDir, baseName(src));
+    const sameNamedAsDest = baseName(src).toLowerCase() === baseName(destDir).toLowerCase();
+    const root = sameNamedAsDest ? normalizePath(destDir) : joinPath(destDir, baseName(src));
     plan.push({ from: src, to: root, isDirectory: true });
     const prefix = st.path.length + 1;
     for (const file of await ctx.fs.walk(st.path)) {

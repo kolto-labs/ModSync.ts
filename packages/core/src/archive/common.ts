@@ -82,16 +82,20 @@ export function impliedDirectories(entryPath: string): string[] {
  * attributes claim. Archives written by some tools (hidden/read-only folders,
  * missing trailing slashes, DOS-only attributes) record folders that look like
  * files; extracting those as files makes every child fail with ENOTDIR.
- * Directory entries that collapse onto one case-insensitive path are merged.
+ * Directory entries that collapse onto one case-insensitive path are merged,
+ * including a zero-length file entry sitting next to an explicit directory entry
+ * of the same path (a non-empty one is kept, so no data is dropped).
  */
 export function reconcileDirectoryEntries<T extends ArchiveEntry>(entries: T[]): T[] {
   const parents = new Set<string>();
   for (const entry of entries) for (const dir of impliedDirectories(entry.path)) parents.add(dir.toLowerCase());
+  const explicitDirectories = new Set<string>();
+  for (const entry of entries) if (entry.isDirectory) explicitDirectories.add(entry.path.toLowerCase());
   const seenDirectories = new Set<string>();
   const out: T[] = [];
   for (const entry of entries) {
     const key = entry.path.toLowerCase();
-    const isDirectory = entry.isDirectory || parents.has(key);
+    const isDirectory = entry.isDirectory || parents.has(key) || (entry.size === 0 && explicitDirectories.has(key));
     if (isDirectory) {
       if (seenDirectories.has(key)) continue;
       seenDirectories.add(key);

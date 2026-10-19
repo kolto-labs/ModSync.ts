@@ -275,6 +275,23 @@ describe("directory entry classification", () => {
     ]);
   });
 
+  it("reconcileDirectoryEntries merges an empty file entry into an explicit empty directory of the same path", () => {
+    const entries = [
+      { path: "Empty", isDirectory: false, size: 0 },
+      { path: "empty", isDirectory: true, size: 0 },
+      { path: "Dir", isDirectory: true, size: 0 },
+      { path: "dir", isDirectory: false, size: 0 },
+      { path: "Data", isDirectory: true, size: 0 },
+      { path: "Data", isDirectory: false, size: 5 },
+    ];
+    expect(reconcileDirectoryEntries(entries)).toEqual([
+      { path: "Empty", isDirectory: true, size: 0 },
+      { path: "Dir", isDirectory: true, size: 0 },
+      { path: "Data", isDirectory: true, size: 0 },
+      { path: "Data", isDirectory: false, size: 5 },
+    ]);
+  });
+
   it("recognises 7z directory attributes whatever other flags are set", () => {
     for (const attributes of ["D", "D drwxr-xr-x", "RD", "HD drwxr-xr-x", "HSD", "DA", "D_ drwxr-xr-x", " drwxr-xr-x"]) {
       expect(sevenZipAttributesMarkDirectory(attributes), attributes).toBe(true);
