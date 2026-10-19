@@ -164,8 +164,10 @@ function parseIntValue(raw: string, what: string): number {
 }
 
 function parseFloatValue(raw: string, what: string): number {
-  const n = Number(raw.trim());
-  if (raw.trim() === "" || Number.isNaN(n)) throw new PatcherFileError(`${what}: expected a number, got "${raw}"`);
+  const trimmed = raw.trim();
+  const decimalComma = trimmed.indexOf(",") !== -1 && trimmed.indexOf(".") === -1 && trimmed.indexOf(",") === trimmed.lastIndexOf(",");
+  const n = Number(decimalComma ? trimmed.replace(",", ".") : trimmed);
+  if (trimmed === "" || Number.isNaN(n)) throw new PatcherFileError(`${what}: expected a number, got "${raw}"`);
   return n;
 }
 
@@ -1076,8 +1078,16 @@ export class TslPatcher {
   // ----------------------------------------------------------------------
 
   private async processGff(cfg: GffFileConfig): Promise<void> {
-    const { data, source, dest } = await this.loadTarget(cfg);
-    const root = this.parseSource(readGff, data, cfg.filename, source);
+    let loaded: { data: Uint8Array; source: string; dest: Destination };
+    let root: GffRoot;
+    try {
+      loaded = await this.loadTarget(cfg);
+      root = this.parseSource(readGff, loaded.data, cfg.filename, loaded.source);
+    } catch (err) {
+      if (err instanceof VirtualPlaceholderNotice) this.precheckGffAddedNumbers(cfg.modifiers, cfg.filename);
+      throw err;
+    }
+    const { source, dest } = loaded;
     this.logger.debug(`GFFList: ${cfg.filename} loaded from ${source}`);
     this.gffScope = root;
     try {
@@ -1086,6 +1096,19 @@ export class TslPatcher {
       this.gffScope = undefined;
     }
     await this.saveTarget(cfg, dest, writeGff(root));
+  }
+
+  /**
+   * Virtual dry run over a placeholder target: the content patch cannot be applied, but literal numeric values
+   * of AddField entries carry their own field type, so malformed ones are still reported.
+   */
+  private precheckGffAddedNumbers(modifiers: GffModifier[], filename: string): void {
+    for (const m of modifiers) {
+      if (m.kind !== "add") continue;
+      const numeric = m.fieldType === GffFieldType.Float || m.fieldType === GffFieldType.Double || m.fieldType === GffFieldType.Vector || m.fieldType === GffFieldType.Orientation;
+      if (numeric && m.value?.kind === "constant") this.coerceGffValue(m.value.value, m.fieldType, undefined, `${filename} [${m.section}]`);
+      this.precheckGffAddedNumbers(m.children, filename);
+    }
   }
 
   /** Replace `2DAMEMORY<N>` path segments with their stored (path) values. */
