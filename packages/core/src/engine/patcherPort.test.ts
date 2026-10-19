@@ -181,7 +181,17 @@ describe("patcher port", () => {
     await writeText(`${sb.mods}/bad/tslpatchdata/changes.ini`, "[InstallList]\ninstall_folder0=Override\n\n[Override]\nBogus=1\n");
     const bad = await patcher.install({ tslpatchdataDir: `${sb.mods}/bad/tslpatchdata`, gameDir: sb.kotor, dryRun: true });
     expect(bad.ok).toBe(false);
-    expect(bad.errors[0]).toMatch(/Bogus|expected/);
+    expect(bad.errors.length).toBeGreaterThan(0);
+    expect(bad.errors[0]).toMatch(/not found/);
+    expect(bad.filesWritten).toEqual([]);
+    await writeText(`${sb.mods}/nosection/tslpatchdata/changes.ini`, "[InstallList]\ninstall_folder0=Override\n");
+    const noSection = await patcher.install({ tslpatchdataDir: `${sb.mods}/nosection/tslpatchdata`, gameDir: sb.kotor, dryRun: true });
+    expect(noSection.ok).toBe(false);
+    expect(noSection.errors[0]).toMatch(/references section \[install_folder0\] which does not exist/);
+    await writeText(`${sb.mods}/emptyname/tslpatchdata/changes.ini`, "[InstallList]\ninstall_folder0=Override\n\n[Override]\nFile0=\n");
+    const emptyName = await patcher.install({ tslpatchdataDir: `${sb.mods}/emptyname/tslpatchdata`, gameDir: sb.kotor, dryRun: true });
+    expect(emptyName.ok).toBe(false);
+    expect(emptyName.errors[0]).toMatch(/empty file name/);
     const missing = await patcher.install({ tslpatchdataDir: `${sb.mods}/nope`, gameDir: sb.kotor, dryRun: false });
     expect(missing.ok).toBe(false);
   });
