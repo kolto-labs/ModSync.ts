@@ -211,7 +211,7 @@ Replace0=bar.utc       ; overwrite
 The files of `install_folder<N>` are listed in the section named by the key (`[install_folder<N>]`); the value is the destination. A section named after the value is accepted as a fallback. Folder values are paths relative to the game dir. If the destination is an archive path (`Modules\danm13.mod`, `.rim`, `.erf`, `.sav`) the file is inserted into that archive (Replace overwriting an existing entry). Optional per-file section `[foo.uti]`: `!SourceFolder`, `!SaveAs`/`!Filename`, `!Destination`, `!ReplaceFile`. `!OverrideType` (`ignore` default | `warn` | `rename`): what to do if a file being installed into a module also exists in Override; rename renames the Override copy to `.bak`.
 
 ### [2DAList]
-The key of a list entry is an opaque identifier (`Table<N>`, `File<N>`, `Replace<N>`, ...; entries are ordered by their numeric suffix, and a key starting with `Replace` replaces); the value is the file name. The same holds for every file list ([InstallList] file sections, [GFFList], [CompileList], [HACKList], [SSFList]).
+The key of a list entry is an opaque identifier (`Table<N>`, `File<N>`, `Replace<N>`, ...; entries are processed in INI file order, never re-sorted by their numeric suffix, and a key starting with `Replace` replaces); the value is the file name. The same holds for every file list ([InstallList] file sections, [GFFList], [CompileList], [HACKList], [SSFList]). Only the `[TLKList]` entries and the `install_folder<N>` keys of `[InstallList]` are ordered by numeric suffix.
 ```
 [2DAList]
 Table0=spells.2da
@@ -234,7 +234,7 @@ forbiditemmask=high()      ; max numeric value in column + 1
 - Cell values: literal, `****` (empty), `StrRef#`, `2DAMEMORY#`, `high()`.
 - Memory stores: `2DAMEMORY#=RowIndex` | `RowLabel` | `<column name>`.
 - `AddColumn`: `ColumnLabel=name`, `DefaultValue=****` (or text), `I<rowIndex>=value`, `L<rowLabel>=value`, `2DAMEMORY#=I<idx>` / `L<label>`.
-- No DeleteRow. Modifiers execute in numeric key order.
+- No DeleteRow. Modifiers (`AddRow`/`ChangeRow`/`CopyRow`/`AddColumn`, and `AddField` in [GFFList]) execute in INI file order across all prefixes, as TSLPatcher/HoloPatcher do: `AddRow0`, `AddRow1`, `ChangeRow0` run in that order, so a `ChangeRow` can read a `2DAMEMORY#` stored by a later-numbered `AddRow` listed before it. Within one row section, `RowIndex`/`RowLabel`/token-copy stores run at their key position (a later cell may read them); stores of a column's content run after all cells are written.
 
 ### [GFFList]
 ```

@@ -127,6 +127,8 @@ export interface TwoDAStore {
   pool: "2damemory" | "strref";
   token: number;
   source: TwoDAStoreSource;
+  /** Number of the section's cell assignments listed before this store; set only when cells follow it and the source does not read cell content. */
+  beforeCells?: number;
 }
 
 export interface TwoDAAddRow {
@@ -337,16 +339,14 @@ function isBang(key: string): boolean {
   return key.startsWith("!");
 }
 
-const FILE_ENTRY_PREFIXES = ["File", "Replace", "Table"] as const;
-
 /**
- * Entries of a file-list section in numeric order. TSLPatcher/HoloPatcher treat the key as an opaque
+ * Entries of a file-list section in INI file order. TSLPatcher/HoloPatcher treat the key as an opaque
  * identifier (`File<N>`, `Table<N>`, `Replace<N>`, ...) and only look at the value (the file name); a key
  * starting with `Replace` marks a replacing entry.
  */
 function fileListEntries(section: IniSection): (IniEntry & { replace: boolean })[] {
   const out: (IniEntry & { replace: boolean })[] = [];
-  for (const e of orderByNumericSuffix(section.entries, FILE_ENTRY_PREFIXES)) {
+  for (const e of section.entries) {
     if (isBang(e.key)) continue;
     if (e.value.trim() === "") throw new PatcherConfigError("empty file name", section.name, e.key);
     out.push({ ...e, replace: e.key.toLowerCase().startsWith("replace") });
@@ -580,12 +580,14 @@ function parseRowModifier(kind: "addRow" | "changeRow" | "copyRow", section: Ini
     }
     const store = parseStore(e.key, e.value, section.name);
     if (store) {
+      if (store.source.kind !== "column") store.beforeCells = cells.size;
       stores.push(store);
       continue;
     }
     if (isBang(e.key)) continue;
     cells.set(e.key, parsePatcherValue(e.value, true));
   }
+  for (const store of stores) if (store.beforeCells !== undefined && store.beforeCells >= cells.size) delete store.beforeCells;
   if (kind === "addRow") {
     const m: TwoDAAddRow = { kind, section: section.name, cells, stores };
     if (exclusiveColumn) m.exclusiveColumn = exclusiveColumn;
@@ -631,8 +633,7 @@ function parse2daList(ini: IniDocument): TwoDAFileConfig[] {
     const filename = e.value.trim();
     const { common, section } = readCommon(ini, filename, e.replace, s.name, e.key, true);
     const file: TwoDAFileConfig = { ...common, modifiers: [] };
-    const ordered = orderByNumericSuffix(section!.entries, ["AddRow", "ChangeRow", "CopyRow", "AddColumn"]);
-    for (const m of ordered) {
+    for (const m of section!.entries) {
       if (isBang(m.key)) continue;
       const sub = requireSection(ini, m.value.trim(), section!.name, m.key);
       if (numericSuffix(m.key, "AddRow") !== undefined) file.modifiers.push(parseRowModifier("addRow", sub));
@@ -738,8 +739,7 @@ function parseGffList(ini: IniDocument): GffFileConfig[] {
     const filename = e.value.trim();
     const { common, section } = readCommon(ini, filename, e.replace, s.name, e.key, true);
     const file: GffFileConfig = { ...common, modifiers: [] };
-    const ordered = orderByNumericSuffix(section!.entries, ["AddField"]);
-    for (const m of ordered) {
+    for (const m of section!.entries) {
       if (isBang(m.key)) continue;
       if (numericSuffix(m.key, "AddField") !== undefined) {
         const sub = requireSection(ini, m.value.trim(), section!.name, m.key);
