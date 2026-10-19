@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { RealFileSystem } from "../fs/realFileSystem.js";
+import { VirtualFileSystem } from "../fs/virtualFileSystem.js";
 import type { FileSystemPort } from "../ports/filesystem.js";
 import { NullLogger } from "../logging/logger.js";
 import { createPatcher, decodeIni, listNamespaces } from "./patcherPort.js";
@@ -98,6 +99,40 @@ describe("patcher port", () => {
     expect(bad.errors[0]).toMatch(/Bogus|expected/);
     const missing = await patcher.install({ tslpatchdataDir: `${sb.mods}/nope`, gameDir: sb.kotor, dryRun: false });
     expect(missing.ok).toBe(false);
+  });
+
+  it("native dry run over a virtual fs reports zero-byte placeholders as unverified while real runs still fail", async () => {
+    const ini = "[2DAList]\nTable0=table_a.2da\n\n[table_a.2da]\nChangeRow0=row_fix\n\n[row_fix]\nRowIndex=0\nlabel=changed\n";
+    const patcher = createPatcher({ ...sb.settings, patcherEngine: "Native" }, NullLogger);
+
+    const vfs = new VirtualFileSystem(new RealFileSystem());
+    const virtualDir = `${sb.mods}/v/tslpatchdata`;
+    await vfs.mkdirp(virtualDir);
+    await vfs.writeFile(`${virtualDir}/changes.ini`, new TextEncoder().encode(ini));
+    await vfs.addVirtualFiles([{ path: `${virtualDir}/table_a.2da`, size: 120 }]);
+    const dry = await patcher.install({ tslpatchdataDir: virtualDir, gameDir: sb.kotor, dryRun: true, fs: vfs });
+    expect(dry.errors).toEqual([]);
+    expect(dry.ok).toBe(true);
+    expect(dry.unverified).toHaveLength(1);
+    expect(dry.unverified?.[0]).toContain("table_a.2da");
+
+    await writeText(`${sb.mods}/r2/tslpatchdata/changes.ini`, ini);
+    await writeText(`${sb.mods}/r2/tslpatchdata/table_a.2da`, "");
+    for (const dryRun of [true, false]) {
+      const real = await patcher.install({ tslpatchdataDir: `${sb.mods}/r2/tslpatchdata`, gameDir: sb.kotor, dryRun, fs: new RealFileSystem() });
+      expect(real.ok).toBe(false);
+      expect(real.errors.join("\n")).toMatch(/table_a\.2da.*is empty \(0 bytes\)/);
+      expect(real.unverified).toEqual([]);
+    }
+  });
+
+  it("native engine names the missing 2DA when it is in neither the game dir nor tslpatchdata", async () => {
+    await writeText(`${sb.mods}/m2/tslpatchdata/changes.ini`, "[2DAList]\nTable0=table_b.2da\n\n[table_b.2da]\nChangeRow0=row_fix\n\n[row_fix]\nRowIndex=0\nlabel=changed\n");
+    const patcher = createPatcher({ ...sb.settings, patcherEngine: "Native" }, NullLogger);
+    const r = await patcher.install({ tslpatchdataDir: `${sb.mods}/m2/tslpatchdata`, gameDir: sb.kotor, dryRun: false, fs: new RealFileSystem() });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join("\n")).toContain("table_b.2da not found in");
+    expect(r.errors.join("\n")).toContain(`${sb.kotor}/Override/table_b.2da`);
   });
 
   it("external engines only parse the ini during a dry run and fail without a path otherwise", async () => {

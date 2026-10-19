@@ -18,6 +18,17 @@ import { createProcessHost, type ProcessHost } from "./windowsExec.js";
 
 export type PromptHandler = (prompt: UserPrompt) => Promise<UserPromptAnswer>;
 
+/** A non-blocking dry-run observation an action wants surfaced as an info-level validation issue. */
+export interface InstallNotice {
+  code: string;
+  message: string;
+  modGuid?: string;
+  instructionGuid?: string;
+  path?: string;
+}
+
+export type NoticeHandler = (notice: InstallNotice) => void;
+
 export interface InstallContext {
   fs: FileSystemPort;
   resolver: PathResolver;
@@ -26,6 +37,7 @@ export interface InstallContext {
   selection: SelectionSet;
   logger: Logger;
   prompt: PromptHandler;
+  notify?: NoticeHandler;
   dryRun: boolean;
   openArchive: typeof openArchive;
   patcher: PatcherPort;
@@ -41,6 +53,7 @@ export interface CreateInstallContextOptions {
   fs?: FileSystemPort;
   logger?: Logger;
   prompt?: PromptHandler;
+  notify?: NoticeHandler;
   dryRun?: boolean;
   openArchive?: typeof openArchive;
   patcher?: PatcherPort;
@@ -71,6 +84,7 @@ export function createInstallContext(opts: CreateInstallContextOptions): Install
     selection: opts.selection,
     logger,
     prompt: opts.prompt ?? autoAnswerPrompt,
+    notify: opts.notify,
     dryRun: opts.dryRun ?? false,
     openArchive: opts.openArchive ?? openArchive,
     patcher: opts.patcher ?? createPatcher(opts.settings, logger),

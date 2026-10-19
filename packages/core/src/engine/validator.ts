@@ -195,6 +195,9 @@ export async function validate(
     dryRun: true,
     openArchive: opts.openArchive,
     patcher: opts.patcher,
+    notify: (notice) => {
+      issues.push({ severity: "info", ...notice });
+    },
     prompt: async (prompt: UserPrompt) => {
       const key = prompt.instructionGuid ?? prompt.id;
       if (!promptIssues.has(key)) {

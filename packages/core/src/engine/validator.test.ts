@@ -132,6 +132,29 @@ describe("validate static checks", () => {
     expect(await readdir(`${sb.kotor}/Override`)).toEqual([]);
   });
 
+  it("reports a patcher targeting a zero-byte extracted 2DA as info, not an error", async () => {
+    await writeZip(`${sb.mods}/pack_a.zip`, {
+      "tslpatchdata/changes.ini": "[2DAList]\nTable0=table_a.2da\n\n[table_a.2da]\nChangeRow0=row_fix\n\n[row_fix]\nRowIndex=0\nlabel=changed\n",
+      "tslpatchdata/table_a.2da": new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+    });
+    const f = file([
+      mod(1, {
+        instructions: [
+          instr("Extract", { source: ["<<modDirectory>>/pack_a.zip"] }),
+          instr("Patcher", { guid: G(50), source: ["<<modDirectory>>/pack_a"], destination: "<<kotorDirectory>>" }),
+        ],
+      }),
+    ]);
+    const report = await validate(f, sb.settings);
+    expect(report.issues.filter((i) => i.severity === "error")).toEqual([]);
+    expect(report.ok).toBe(true);
+    const notices = report.issues.filter((i) => i.code === "virtual-source-unverified");
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({ severity: "info", modGuid: G(1), instructionGuid: G(50) });
+    expect(notices[0]!.message).toContain("table_a.2da");
+    expect(await readdir(`${sb.kotor}/Override`)).toEqual([]);
+  });
+
   it("reports cycles and dependency problems from the selection", async () => {
     const f = file([mod(1, { installAfter: [G(2)] }), mod(2, { installAfter: [G(1)] }), mod(3, { dependencies: [G(4)] }), mod(4, { isSelected: false })]);
     const report = await validate(f, sb.settings);

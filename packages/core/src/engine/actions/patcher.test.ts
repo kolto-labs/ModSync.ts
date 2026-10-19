@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { RealFileSystem } from "../../fs/realFileSystem.js";
-import { createInstallContext } from "../context.js";
+import { createInstallContext, type InstallNotice } from "../context.js";
+import type { PatcherPort } from "../patcherPort.js";
 import { computeSelection } from "../selection.js";
 import { file, instr, makeSandbox, mod, writeText, type Sandbox } from "../testing.js";
 import { executeInstruction } from "./index.js";
@@ -102,6 +103,48 @@ describe("locateTslpatchdata", () => {
     await seedData(`${sb.mods}/m/Wrapper/tslpatchdata`);
     const located = await locateTslpatchdata(realCtx(), `${sb.mods}/m/Wrapper/tslpatchdata`);
     expect(located?.tslpatchdataDir).toBe(`${sb.mods}/m/Wrapper/tslpatchdata`);
+  });
+});
+
+describe("Patcher action dry-run notices", () => {
+  const unverifiedPatcher = (unverified: string[]): PatcherPort => ({
+    install: async () => ({ ok: true, errors: [], warnings: [], filesWritten: [], log: [], unverified }),
+  });
+
+  it("forwards unverified placeholder targets as notices without failing the instruction", async () => {
+    await seedData(`${sb.mods}/Pack v1/tslpatchdata`);
+    const notices: InstallNotice[] = [];
+    const ctx = createInstallContext({
+      settings: sb.settings,
+      selection: computeSelection(file([mod(1)]), sb.settings),
+      fs: new RealFileSystem(),
+      dryRun: true,
+      patcher: unverifiedPatcher(["2DAList table_a.2da: table_a.2da (tslpatchdata) is a zero-byte virtual placeholder; content patch not verified"]),
+      notify: (n) => notices.push(n),
+    });
+    const modA = mod(1);
+    const step = instr("Patcher", { source: ["<<modDirectory>>\\Pack*"], destination: "<<kotorDirectory>>" });
+    const r = await executeInstruction(ctx, step, modA);
+    expect(r.code).toBe("Success");
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({ code: "virtual-source-unverified", modGuid: modA.guid, instructionGuid: step.guid });
+    expect(notices[0]!.message).toContain("table_a.2da");
+  });
+
+  it("emits nothing when the patcher reports no unverified targets", async () => {
+    await seedData(`${sb.mods}/Pack v1/tslpatchdata`);
+    const notices: InstallNotice[] = [];
+    const ctx = createInstallContext({
+      settings: sb.settings,
+      selection: computeSelection(file([mod(1)]), sb.settings),
+      fs: new RealFileSystem(),
+      dryRun: true,
+      patcher: unverifiedPatcher([]),
+      notify: (n) => notices.push(n),
+    });
+    const r = await executeInstruction(ctx, instr("Patcher", { source: ["<<modDirectory>>\\Pack*"], destination: "<<kotorDirectory>>" }), mod(1));
+    expect(r.code).toBe("Success");
+    expect(notices).toEqual([]);
   });
 });
 
