@@ -177,6 +177,13 @@ export async function transferInto(
   for (const step of plan) {
     checkCancelled(ctx);
     if (step.isDirectory) {
+      const blocking = await ctx.fs.stat(step.to);
+      if (blocking && !blocking.isDirectory) {
+        if (!overwrite) {
+          throw new ActionError("UnknownError", `cannot ${mode} directory "${step.from}" to "${blocking.path}": a file with that name exists`);
+        }
+        await ctx.fs.remove(blocking.path);
+      }
       await ctx.fs.mkdirp(step.to);
       if (mode === "move") movedDirs.push(step.from);
       continue;

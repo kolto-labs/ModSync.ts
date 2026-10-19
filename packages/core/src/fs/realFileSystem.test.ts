@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -120,6 +120,29 @@ describe("RealFileSystem", () => {
     await fs.remove(`${root}/moved`);
     expect(await fs.exists(`${root}/moved`)).toBe(false);
     await expect(fs.remove(`${root}/moved`)).resolves.toBeUndefined();
+  });
+
+  it("creates, writes, copies and moves into an existing directory whatever the casing", async () => {
+    await mkdir(`${root}/Game/override`, { recursive: true });
+    await fs.mkdirp(`${root}/Game/Override/Sub/Deep`);
+    expect((await readdir(`${root}/Game`)).sort()).toEqual(["override"]);
+    expect((await readdir(`${root}/Game/override`)).sort()).toEqual(["Sub"]);
+
+    await fs.writeFile(`${root}/GAME/OVERRIDE/Written.txt`, Buffer.from("w"));
+    await fs.copyFile(`${root}/Mods/Alpha.TXT`, `${root}/game/Override/Copied.txt`);
+    await fs.move(`${root}/Mods/Sub Dir/beta.txt`, `${root}/Game/OverRide/sub/Moved.txt`);
+    expect((await readdir(`${root}/Game`)).sort()).toEqual(["override"]);
+    expect((await readdir(`${root}/Game/override`)).sort()).toEqual(["Copied.txt", "Sub", "Written.txt"]);
+    expect((await readdir(`${root}/Game/override/Sub`)).sort()).toEqual(["Deep", "Moved.txt"]);
+  });
+
+  it("keeps the requested spelling of the final segment when moving", async () => {
+    await fs.move(`${root}/Mods/Alpha.TXT`, `${root}/Mods/ALPHA-renamed.TXT`);
+    expect((await readdir(`${root}/Mods`)).sort()).toEqual(["ALPHA-renamed.TXT", "Sub Dir"]);
+  });
+
+  it("mkdirp reports ENOTDIR when a file blocks the path", async () => {
+    await expect(fs.mkdirp(`${root}/Mods/Alpha.TXT/inner`)).rejects.toMatchObject({ code: "ENOTDIR" });
   });
 
   it("move falls back to copy+delete on EXDEV", async () => {

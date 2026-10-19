@@ -96,6 +96,40 @@ describe.each(FLAVORS)("actions on %s file system", (flavor) => {
     else expect(await readFile(`${sb.kotor}/Override/a.txt`, "utf8")).toBe("old");
   });
 
+  it("Move merges a folder into the game folder that already has the same name in another casing", async () => {
+    await writeText(`${sb.mods}/m/OVERRIDE/new.txt`, "new");
+    await writeText(`${sb.mods}/m/OVERRIDE/deep/inner.txt`, "inner");
+    await writeText(`${sb.kotor}/Override/keep.txt`, "keep");
+    const ctx = makeCtx(flavor);
+    const r = await executeInstruction(ctx, instr("Move", { source: ["<<modDirectory>>/m/OVERRIDE"], destination: "<<kotorDirectory>>" }), mod(1));
+    expect(r.code).toBe("Success");
+    expect((await ctx.fs.readDir(sb.kotor)).map((e) => e.name)).toEqual(["Override"]);
+    for (const rel of ["keep.txt", "new.txt", "deep/inner.txt"]) expect(await ctx.fs.exists(`${sb.kotor}/Override/${rel}`), rel).toBe(true);
+    expect(await ctx.fs.exists(`${sb.mods}/m/OVERRIDE`)).toBe(false);
+  });
+
+  it("Move into a lower-case destination folder reuses the existing Override folder", async () => {
+    await writeText(`${sb.mods}/m/a.txt`, "a");
+    const ctx = makeCtx(flavor);
+    const r = await executeInstruction(ctx, instr("Move", { source: ["<<modDirectory>>/m/a.txt"], destination: "<<kotorDirectory>>/override/sub" }), mod(1));
+    expect(r.code).toBe("Success");
+    expect((await ctx.fs.readDir(sb.kotor)).map((e) => e.name)).toEqual(["Override"]);
+    expect(await ctx.fs.exists(`${sb.kotor}/Override/sub/a.txt`)).toBe(true);
+  });
+
+  it("Move replaces a file that blocks a folder only with overwrite", async () => {
+    await writeText(`${sb.mods}/m/Tools/x.txt`, "x");
+    await writeText(`${sb.kotor}/Tools`, "i am a file");
+    const ctx = makeCtx(flavor);
+    const kept = await executeInstruction(ctx, instr("Move", { source: ["<<modDirectory>>/m/Tools"], destination: "<<kotorDirectory>>", overwrite: false }), mod(1));
+    expect(kept.code).toBe("UnknownError");
+    expect(kept.message).toMatch(/a file with that name exists/);
+    const replaced = await executeInstruction(ctx, instr("Move", { source: ["<<modDirectory>>/m/Tools"], destination: "<<kotorDirectory>>", overwrite: true }), mod(1));
+    expect(replaced.code).toBe("Success");
+    expect((await ctx.fs.stat(`${sb.kotor}/Tools`))?.isDirectory).toBe(true);
+    expect(await ctx.fs.exists(`${sb.kotor}/Tools/x.txt`)).toBe(true);
+  });
+
   it("Move reports a missing source and a missing destination", async () => {
     const ctx = makeCtx(flavor);
     const r = await executeInstruction(ctx, instr("Move", { source: ["<<modDirectory>>/nope/*"], destination: "<<kotorDirectory>>/Override" }), mod(1));

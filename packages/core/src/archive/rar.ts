@@ -14,7 +14,7 @@ import type { FileHeader } from "node-unrar-js";
 
 import { normalizePath } from "../fs/paths.js";
 import type { ArchiveEntry, ArchiveExtractOptions, ArchiveReader } from "../ports/archive.js";
-import { ArchiveEntryNotFoundError, ArchiveError, extractThroughStaging, findEntry, normalizeEntryPath, sortEntries } from "./common.js";
+import { ArchiveEntryNotFoundError, ArchiveError, extractThroughStaging, findEntry, normalizeEntryPath, reconcileDirectoryEntries, sortEntries } from "./common.js";
 
 const require = createRequire(import.meta.url);
 
@@ -65,7 +65,7 @@ export class RarArchive implements ArchiveReader {
 
   async extract(destDir: string, filter?: (entry: ArchiveEntry) => boolean, options: ArchiveExtractOptions = {}): Promise<string[]> {
     const records = (await this.records()).filter((entry) => !filter || filter(entry));
-    const selected = new Map(records.map((entry) => [entry.rawName, entry]));
+    const selected = new Map(records.filter((entry) => !entry.isDirectory).map((entry) => [entry.rawName, entry]));
     return extractThroughStaging(normalizePath(destDir), records, async (temp) => {
       const extractor = await this.extractor(temp);
       const result = extractor.extract({ files: (header) => selected.has(header.name) });
@@ -129,7 +129,7 @@ export class RarArchive implements ArchiveReader {
       } catch (err) {
         throw new ArchiveError(`Cannot read rar "${this.archivePath}": ${(err as Error).message}`, this.archivePath, { cause: err });
       }
-      return sortEntries(out);
+      return sortEntries(reconcileDirectoryEntries(out));
     })();
     return this.entriesPromise;
   }

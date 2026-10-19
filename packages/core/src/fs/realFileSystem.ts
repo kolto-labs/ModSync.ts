@@ -17,7 +17,7 @@ import { pipeline } from "node:stream/promises";
 
 import type { DirEntry, FileStat, FileSystemPort } from "../ports/filesystem.js";
 import { withInstallRootOwnership } from "./writerOwnership.js";
-import { comparePaths, joinPath, normalizePath, parentPath, splitPath } from "./paths.js";
+import { baseName, comparePaths, joinPath, normalizePath, parentPath, splitPath } from "./paths.js";
 
 function errorCode(err: unknown): string | undefined {
   return typeof err === "object" && err !== null && "code" in err
@@ -102,25 +102,31 @@ export class RealFileSystem implements FileSystemPort {
   }
 
   async writeFile(path: string, data: Uint8Array): Promise<void> {
-    const target = (await this.resolveExisting(path)) ?? normalizePath(path);
+    const target = await this.resolveForWrite(path);
     await this.mkdirp(parentPath(target));
     await fsp.writeFile(target, data);
   }
 
+  /**
+   * Create `path` and its missing ancestors. Existing ancestors are matched
+   * case-insensitively so "Override" lands in an existing "override" instead of
+   * creating a sibling directory with different casing.
+   */
   async mkdirp(path: string): Promise<void> {
-    await fsp.mkdir(normalizePath(path), { recursive: true });
+    await fsp.mkdir(await this.resolveForWrite(path), { recursive: true });
   }
 
   async copyFile(src: string, dest: string): Promise<void> {
     const from = (await this.resolveExisting(src)) ?? normalizePath(src);
-    const to = (await this.resolveExisting(dest)) ?? normalizePath(dest);
+    const to = await this.resolveForWrite(dest);
     await this.mkdirp(parentPath(to));
     await fsp.copyFile(from, to);
   }
 
   async move(src: string, dest: string): Promise<void> {
     const from = (await this.resolveExisting(src)) ?? normalizePath(src);
-    const to = normalizePath(dest);
+    const destNorm = normalizePath(dest);
+    const to = baseName(destNorm) === "" ? destNorm : joinPath(await this.resolveForWrite(parentPath(destNorm)), baseName(destNorm));
     await this.mkdirp(parentPath(to));
     try {
       await fsp.rename(from, to);
@@ -189,6 +195,19 @@ export class RealFileSystem implements FileSystemPort {
     const hash = createHash("sha1");
     await pipeline(createReadStream(actual), hash);
     return hash.digest("hex");
+  }
+
+  /**
+   * Like resolveCase, but for paths that may not exist yet: the longest
+   * existing prefix takes its on-disk spelling and the rest is appended as given.
+   */
+  private async resolveForWrite(path: string): Promise<string> {
+    const norm = normalizePath(path);
+    const existing = await this.resolveCase(norm);
+    if (existing !== undefined) return existing;
+    const parent = parentPath(norm);
+    if (parent === norm || parent === "") return norm;
+    return joinPath(await this.resolveForWrite(parent), baseName(norm));
   }
 
   private async resolveExisting(path: string): Promise<string | undefined> {

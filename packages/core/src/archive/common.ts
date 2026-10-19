@@ -51,6 +51,15 @@ export function normalizeEntryPath(name: string): { path: string; isDirectory: b
   return { path: segments.join("/"), isDirectory };
 }
 
+/**
+ * Zip central-directory "external attributes": the DOS directory bit lives in
+ * the low byte, a Unix mode (S_IFDIR) in the high 16 bits.
+ */
+export function zipAttributesMarkDirectory(externalFileAttributes: number): boolean {
+  if ((externalFileAttributes & 0x10) !== 0) return true;
+  return ((externalFileAttributes >>> 16) & 0o170000) === 0o040000;
+}
+
 /** Exact match first, then case-insensitive. */
 export function findEntry<T extends ArchiveEntry>(entries: readonly T[], entryPath: string): T | undefined {
   const wanted = normalizeEntryPath(entryPath)?.path ?? entryPath;
@@ -65,6 +74,32 @@ export function impliedDirectories(entryPath: string): string[] {
   const parts = entryPath.split("/");
   const out: string[] = [];
   for (let i = 1; i < parts.length; i++) out.push(parts.slice(0, i).join("/"));
+  return out;
+}
+
+/**
+ * An entry that is the parent of another entry is a directory, whatever its
+ * attributes claim. Archives written by some tools (hidden/read-only folders,
+ * missing trailing slashes, DOS-only attributes) record folders that look like
+ * files; extracting those as files makes every child fail with ENOTDIR.
+ * Directory entries that collapse onto one case-insensitive path are merged.
+ */
+export function reconcileDirectoryEntries<T extends ArchiveEntry>(entries: T[]): T[] {
+  const parents = new Set<string>();
+  for (const entry of entries) for (const dir of impliedDirectories(entry.path)) parents.add(dir.toLowerCase());
+  const seenDirectories = new Set<string>();
+  const out: T[] = [];
+  for (const entry of entries) {
+    const key = entry.path.toLowerCase();
+    const isDirectory = entry.isDirectory || parents.has(key);
+    if (isDirectory) {
+      if (seenDirectories.has(key)) continue;
+      seenDirectories.add(key);
+      out.push(entry.isDirectory && entry.size === 0 ? entry : { ...entry, isDirectory: true, size: 0 });
+    } else {
+      out.push(entry);
+    }
+  }
   return out;
 }
 
@@ -87,7 +122,8 @@ export async function assertArchiveTarget(dest: string, target: string): Promise
   for (;;) {
     try { await lstat(existing); break; }
     catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT" && code !== "ENOTDIR") throw error;
       const parent = dirname(existing);
       if (parent === existing) throw error;
       existing = parent;
@@ -100,10 +136,43 @@ export async function assertArchiveTarget(dest: string, target: string): Promise
   if (isAbsolute(rel) || rel === ".." || rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)) throw new PathEscapeError(canonical, root, target);
 }
 
+/**
+ * The archive names `directory` as a folder (or as the parent of an entry), so a
+ * regular file already sitting on that path inside the extraction root is stale
+ * and gets replaced. Symlinks are left to assertArchiveTarget.
+ */
+async function removeFileObstruction(dest: string, directory: string, options: ArchiveExtractOptions, entry?: ArchiveEntry): Promise<void> {
+  const rel = relative(dest, directory);
+  if (rel === "" || isAbsolute(rel) || rel.startsWith("..")) return;
+  let current = dest;
+  for (const segment of rel.split(/[\\/]/)) {
+    current = join(current, segment);
+    let stat;
+    try { stat = await lstat(current); }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "ENOTDIR") return;
+      throw error;
+    }
+    if (stat.isDirectory() || stat.isSymbolicLink()) continue;
+    await beforeArchiveWrite(current, options, entry);
+    await rm(current, { force: true });
+    return;
+  }
+}
+
 export async function prepareArchiveTarget(dest: string, target: string, options: ArchiveExtractOptions, entry?: ArchiveEntry): Promise<void> {
   await beforeArchiveWrite(target, options, entry);
   await assertArchiveTarget(dest, target);
-  await mkdir(entry?.isDirectory ? target : dirname(target), { recursive: true });
+  const directory = entry?.isDirectory ? target : dirname(target);
+  try {
+    await mkdir(directory, { recursive: true });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOTDIR" && code !== "EEXIST") throw error;
+    await removeFileObstruction(dest, directory, options, entry);
+    await mkdir(directory, { recursive: true });
+  }
   await beforeArchiveWrite(target, options, entry);
   await assertArchiveTarget(dest, target);
 }

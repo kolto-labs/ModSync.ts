@@ -11,7 +11,7 @@ import yauzl from "yauzl";
 
 import { joinPath, normalizePath } from "../fs/paths.js";
 import type { ArchiveEntry, ArchiveExtractOptions, ArchiveReader } from "../ports/archive.js";
-import { ArchiveEntryNotFoundError, ArchiveError, beforeArchiveWrite, openArchiveOutput, prepareArchiveTarget, findEntry, normalizeEntryPath, sortEntries } from "./common.js";
+import { ArchiveEntryNotFoundError, ArchiveError, beforeArchiveWrite, openArchiveOutput, prepareArchiveTarget, findEntry, normalizeEntryPath, reconcileDirectoryEntries, sortEntries, zipAttributesMarkDirectory } from "./common.js";
 
 interface ZipEntryRecord extends ArchiveEntry {
   raw: yauzl.Entry;
@@ -114,17 +114,18 @@ export class ZipArchive implements ArchiveReader {
       for (const raw of raws) {
         const normalized = normalizeEntryPath(raw.fileName);
         if (!normalized) continue;
-        const key = normalized.path.toLowerCase() + (normalized.isDirectory ? "/" : "");
+        const isDirectory = normalized.isDirectory || zipAttributesMarkDirectory(raw.externalFileAttributes);
+        const key = normalized.path.toLowerCase() + (isDirectory ? "/" : "");
         if (seen.has(key)) continue;
         seen.add(key);
         out.push({
           path: normalized.path,
-          isDirectory: normalized.isDirectory,
-          size: normalized.isDirectory ? 0 : raw.uncompressedSize,
+          isDirectory,
+          size: isDirectory ? 0 : raw.uncompressedSize,
           raw,
         });
       }
-      return sortEntries(out);
+      return sortEntries(reconcileDirectoryEntries(out));
     });
     return this.entriesPromise;
   }

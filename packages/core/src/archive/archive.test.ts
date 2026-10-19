@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { toPosix } from "../fs/paths.js";
 import type { ArchiveEntry, ArchiveReader } from "../ports/archive.js";
-import { findEntry, normalizeEntryPath } from "./common.js";
+import { findEntry, normalizeEntryPath, reconcileDirectoryEntries, zipAttributesMarkDirectory } from "./common.js";
 import {
   ArchiveEntryNotFoundError,
   UnsupportedArchiveError,
@@ -19,7 +19,7 @@ import {
   openArchive,
 } from "./index.js";
 import { openRar } from "./rar.js";
-import { SevenZipArchive, openSevenZip, parseSevenZipListing, runSevenZipWasm } from "./sevenZip.js";
+import { SevenZipArchive, openSevenZip, parseSevenZipListing, runSevenZipWasm, sevenZipAttributesMarkDirectory } from "./sevenZip.js";
 import { NotAnSfxArchiveError, findSevenZipSignature, openSfx } from "./sfx.js";
 import { openZip } from "./zip.js";
 
@@ -248,6 +248,125 @@ describe("streaming extraction guards", () => {
         }
       } })).rejects.toMatchObject({ name: "AbortError" });
       await expect(readFile(`${root}/cancelled/z-next.txt`)).rejects.toThrow();
+    } finally { await reader.close(); }
+  });
+});
+
+describe("directory entry classification", () => {
+  const isDirectory = async (file: string): Promise<boolean> => (await stat(file)).isDirectory();
+
+  it("reconcileDirectoryEntries turns parents of other entries into directories and merges duplicates", () => {
+    const entries = [
+      { path: "Override", isDirectory: false, size: 0 },
+      { path: "override", isDirectory: true, size: 0 },
+      { path: "Override/a.tpc", isDirectory: false, size: 3 },
+      { path: "tslpatchdata", isDirectory: false, size: 0 },
+      { path: "tslpatchdata/changes.ini", isDirectory: false, size: 7 },
+      { path: "Pack1.2", isDirectory: false, size: 9 },
+      { path: "readme.txt", isDirectory: false, size: 1 },
+    ];
+    expect(reconcileDirectoryEntries(entries)).toEqual([
+      { path: "Override", isDirectory: true, size: 0 },
+      { path: "Override/a.tpc", isDirectory: false, size: 3 },
+      { path: "tslpatchdata", isDirectory: true, size: 0 },
+      { path: "tslpatchdata/changes.ini", isDirectory: false, size: 7 },
+      { path: "Pack1.2", isDirectory: false, size: 9 },
+      { path: "readme.txt", isDirectory: false, size: 1 },
+    ]);
+  });
+
+  it("recognises 7z directory attributes whatever other flags are set", () => {
+    for (const attributes of ["D", "D drwxr-xr-x", "RD", "HD drwxr-xr-x", "HSD", "DA", "D_ drwxr-xr-x", " drwxr-xr-x"]) {
+      expect(sevenZipAttributesMarkDirectory(attributes), attributes).toBe(true);
+    }
+    for (const attributes of ["", "A", "A -rw-r--r--", " -rw-r--r--", "RHSA", "A_ -rwxr-xr-x"]) {
+      expect(sevenZipAttributesMarkDirectory(attributes), attributes).toBe(false);
+    }
+  });
+
+  it("parseSevenZipListing lists read-only and hidden folders and attribute-less parents as directories", () => {
+    const listing = [
+      "Path = Override",
+      "Size = 0",
+      "Attributes = RD",
+      "",
+      "Path = tslpatchdata",
+      "Size = 0",
+      "Attributes = HD drwxr-xr-x",
+      "",
+      "Path = Pack1.2",
+      "Size = 0",
+      "Attributes = A",
+      "",
+      "Path = Pack1.2\\notes.txt",
+      "Size = 4",
+      "Attributes = A",
+      "",
+    ].join("\n");
+    expect(parseSevenZipListing(listing)).toEqual([
+      { path: "Override", isDirectory: true, size: 0 },
+      { path: "Pack1.2", isDirectory: true, size: 0 },
+      { path: "Pack1.2/notes.txt", isDirectory: false, size: 4 },
+      { path: "tslpatchdata", isDirectory: true, size: 0 },
+    ]);
+  });
+
+  it("recognises zip DOS and Unix directory attributes", () => {
+    expect(zipAttributesMarkDirectory(0x10)).toBe(true);
+    expect(zipAttributesMarkDirectory((0o040755 << 16) >>> 0)).toBe(true);
+    expect(zipAttributesMarkDirectory(0x20)).toBe(false);
+    expect(zipAttributesMarkDirectory((0o100644 << 16) >>> 0)).toBe(false);
+  });
+
+  it("extracts zip folders stored without a trailing slash", async () => {
+    const file = `${root}/slashless.zip`;
+    await writeFile(file, zipSync({
+      Override: [new Uint8Array(0), { attrs: 0x10 }],
+      tslpatchdata: [new Uint8Array(0), { os: 3, attrs: (0o040755 << 16) >>> 0 }],
+      "Pack1.2": new Uint8Array(0),
+      "Override/Nested.TPC": text("nested"),
+      "tslpatchdata/changes.ini": text("[Settings]"),
+      "Pack1.2/readme.txt": text("hello"),
+    }));
+    const reader = await openZip(file);
+    try {
+      const entries = await reader.list();
+      for (const name of ["Override", "tslpatchdata", "Pack1.2"]) {
+        expect(entries.find((e) => e.path === name), name).toMatchObject({ isDirectory: true, size: 0 });
+      }
+      const dest = `${root}/out-slashless`;
+      await reader.extract(dest);
+      for (const name of ["Override", "tslpatchdata", "Pack1.2"]) expect(await isDirectory(`${dest}/${name}`), name).toBe(true);
+      expect(await readFile(`${dest}/Override/Nested.TPC`, "utf8")).toBe("nested");
+      expect(await readFile(`${dest}/Pack1.2/readme.txt`, "utf8")).toBe("hello");
+    } finally { await reader.close(); }
+  });
+
+  it("replaces a stale file left where the archive needs a folder", async () => {
+    const dest = `${root}/out-stale`;
+    await mkdir(dest, { recursive: true });
+    await writeFile(`${dest}/Override`, "stale file from an earlier run");
+    const reader = await openZip(zipPath);
+    try {
+      await reader.extract(dest);
+      expect(await isDirectory(`${dest}/Override`)).toBe(true);
+      expect(await readFile(`${dest}/Override/Nested.TPC`, "utf8")).toBe(FIXTURE_FILES["Override/Nested.TPC"]);
+    } finally { await reader.close(); }
+  });
+
+  it("extracts rar folders that are recorded like files", async () => {
+    const file = `${root}/folder-as-file.rar`;
+    await writeFile(file, buildRar({ Override: "", "Override/Nested.TPC": "nested" }));
+    const reader = await openRar(file);
+    try {
+      expect(await reader.list()).toEqual([
+        { path: "Override", isDirectory: true, size: 0 },
+        { path: "Override/Nested.TPC", isDirectory: false, size: 6 },
+      ]);
+      const dest = `${root}/out-rar-folder`;
+      await reader.extract(dest);
+      expect(await isDirectory(`${dest}/Override`)).toBe(true);
+      expect(await readFile(`${dest}/Override/Nested.TPC`, "utf8")).toBe("nested");
     } finally { await reader.close(); }
   });
 });

@@ -23,7 +23,7 @@ import type { SevenZipModule, SevenZipModuleOptions } from "7z-wasm";
 
 import { baseName, joinPath, normalizePath, parentPath, toNative } from "../fs/paths.js";
 import type { ArchiveEntry, ArchiveExtractOptions, ArchiveFormat, ArchiveReader } from "../ports/archive.js";
-import { ArchiveEntryNotFoundError, ArchiveError, extractThroughStaging, findEntry, normalizeEntryPath, sortEntries } from "./common.js";
+import { ArchiveEntryNotFoundError, ArchiveError, extractThroughStaging, findEntry, normalizeEntryPath, reconcileDirectoryEntries, sortEntries } from "./common.js";
 
 type SevenZipFactory = (opts?: Partial<SevenZipModuleOptions>) => Promise<SevenZipModule>;
 
@@ -53,6 +53,15 @@ export interface SevenZipRunResult {
 }
 
 /**
+ * `Attributes` holds the Windows flags that are set ("D", but also "RD", "HD",
+ * "HSD", "DA"... for read-only/hidden/system folders), then optionally a Unix
+ * mode ("drwxr-xr-x"). The directory flag is not necessarily the first letter.
+ */
+export function sevenZipAttributesMarkDirectory(attributes: string): boolean {
+  return attributes.split(/\s+/).some((token) => (/^[^-\s]*D[^-\s]*$/.test(token)) || /^d[-rwxsStT]{9}/.test(token));
+}
+
+/**
  * Parse `7z l -slt -ba` output into entries. Blocks are separated by blank
  * lines and hold `Key = Value` pairs; the archive's own block (which has a
  * `Type` but no `Size`) is skipped.
@@ -74,15 +83,14 @@ export function parseSevenZipListing(text: string): ArchiveEntry[] {
     if (!normalized) continue;
     const attributes = fields.get("Attributes") ?? "";
     if (fields.has("Symbolic Link") || fields.has("Hard Link") || /(?:^|\s)l[rwx-]{9}/.test(attributes)) throw new ArchiveError("Archive links are not supported", "");
-    const isDirectory =
-      normalized.isDirectory || attributes.startsWith("D") || attributes.includes("D_") || fields.get("Folder") === "+";
+    const isDirectory = normalized.isDirectory || sevenZipAttributesMarkDirectory(attributes) || fields.get("Folder") === "+";
     const key = normalized.path.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
     const size = Number.parseInt(fields.get("Size") ?? "0", 10);
     entries.push({ path: normalized.path, isDirectory, size: isDirectory || Number.isNaN(size) ? 0 : size });
   }
-  return sortEntries(entries);
+  return sortEntries(reconcileDirectoryEntries(entries));
 }
 
 // ---- wasm module management ------------------------------------------------
