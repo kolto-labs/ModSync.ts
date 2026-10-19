@@ -446,6 +446,40 @@ describe("TslPatcher", () => {
     expect(patcher.memory.isFieldPath(9)).toBe(false);
   });
 
+  describe("modifier ordering", () => {
+    const run = async (ini: string, name: string): Promise<{ errors: string[]; spells: TwoDA }> => {
+      const patcher = new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs(), backupDir: path.join(modDir, name) });
+      const log = await patcher.apply(parseChangesIni(ini));
+      return { errors: log.errors, spells: read2da(await fsp.readFile(path.join(gameDir, "Override", "spells.2da"))) };
+    };
+
+    it("runs modifiers in INI order so a ChangeRow reads a token stored by a later-numbered AddRow", async () => {
+      const ini = "[2DAList]\nTable0=t.2da\n[t.2da]\n!Destination=Override\nAddRow0=a0\nAddRow1=a1\nChangeRow0=c0\n[a0]\nlabel=ROW_A\n[a1]\nlabel=ROW_B\n2DAMEMORY1=RowIndex\n[c0]\nRowIndex=2DAMEMORY1\nname=changed\n";
+      await fsp.copyFile(path.join(gameDir, "Override", "spells.2da"), path.join(dataDir, "t.2da"));
+      const parsed = parseChangesIni(ini);
+      expect(parsed.twoda[0]!.modifiers.map((m) => m.section)).toEqual(["a0", "a1", "c0"]);
+      const patcher = new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs(), backupDir: path.join(modDir, "order") });
+      const log = await patcher.apply(parsed);
+      expect(log.errors).toEqual([]);
+      const written = read2da(await fsp.readFile(path.join(gameDir, "Override", "t.2da")));
+      expect(written.getCell(3, "label")).toBe("ROW_B");
+      expect(written.getCell(3, "name")).toBe("changed");
+      expect(written.getCell(2, "name")).toBe("");
+    });
+
+    it("resolves a store listed before a cell within the same modifier in key order", async () => {
+      const ini = "[2DAList]\nTable0=spells.2da\n[spells.2da]\nAddRow0=a0\n[a0]\n2DAMEMORY5=RowIndex\nlabel=ROW_A\nname=2DAMEMORY5\nforbiditemmask=2DAMEMORY6\n2DAMEMORY6=label\n";
+      const { errors, spells } = await run(ini, "same");
+      expect(errors).toEqual([expect.stringMatching(/2DAMEMORY6 was never assigned/)]);
+      expect(spells.rows).toHaveLength(2);
+
+      const ok = "[2DAList]\nTable0=spells.2da\n[spells.2da]\nAddRow0=a0\n[a0]\n2DAMEMORY5=RowIndex\nlabel=ROW_A\nname=2DAMEMORY5\n2DAMEMORY6=label\n";
+      const result = await run(ok, "same2");
+      expect(result.errors).toEqual([]);
+      expect(result.spells.getCell(2, "name")).toBe("2");
+    });
+  });
+
   it("fails a memory assignment whose stored field path or source is unusable", async () => {
     const run = async (name: string, body: string): Promise<string[]> => {
       const ini = `[GFFList]\nFile0=p_test.utc\n[p_test.utc]\n${body}\n`;

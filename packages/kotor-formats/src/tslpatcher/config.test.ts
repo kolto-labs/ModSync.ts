@@ -330,12 +330,38 @@ describe("parseNamespacesIni", () => {
 });
 
 describe("parseChangesIni identifier and memory-assignment leniency", () => {
-  it("accepts File<N>, Table<N> and Replace<N> in [2DAList], ordered together by suffix", () => {
+  it("accepts File<N>, Table<N> and Replace<N> in [2DAList], kept in INI file order", () => {
     const { twoda } = parseChangesIni("[2DAList]\nFile2=c.2da\nTable0=a.2da\nReplace1=b.2da\n[a.2da]\n[b.2da]\n[c.2da]\n");
     expect(twoda.map((t) => [t.filename, t.replaceFile])).toEqual([
+      ["c.2da", false],
       ["a.2da", false],
       ["b.2da", true],
-      ["c.2da", false],
+    ]);
+  });
+
+  it("keeps modifier keys in INI file order across prefixes, not numeric-suffix order", () => {
+    const ini = "[2DAList]\nTable0=t.2da\n[t.2da]\nAddRow0=a0\nAddRow1=a1\nChangeRow0=c0\nCopyRow0=k0\nAddColumn0=n0\n[a0]\n[a1]\n[c0]\nRowIndex=0\n[k0]\nRowIndex=0\n[n0]\nColumnLabel=x\n";
+    const { twoda } = parseChangesIni(ini);
+    expect(twoda[0]!.modifiers.map((m) => m.section)).toEqual(["a0", "a1", "c0", "k0", "n0"]);
+    const reversed = parseChangesIni("[2DAList]\nTable0=t.2da\n[t.2da]\nChangeRow0=c0\nAddRow1=a1\nAddRow0=a0\n[a0]\n[a1]\n[c0]\nRowIndex=0\n");
+    expect(reversed.twoda[0]!.modifiers.map((m) => m.section)).toEqual(["c0", "a1", "a0"]);
+  });
+
+  it("keeps GFFList files and AddField keys in INI file order", () => {
+    const ini = "[GFFList]\nFile1=b.utc\nFile0=a.utc\n[a.utc]\nAddField1=f1\nAddField0=f0\n[b.utc]\n[f0]\nFieldType=Word\nLabel=A\nValue=1\n[f1]\nFieldType=Word\nLabel=B\nValue=2\n";
+    const { gff } = parseChangesIni(ini);
+    expect(gff.map((g) => g.filename)).toEqual(["b.utc", "a.utc"]);
+    expect(gff[1]!.modifiers.map((m) => (m.kind === "add" ? m.label : m.kind))).toEqual(["B", "A"]);
+  });
+
+  it("records a 2DA store that precedes cell assignments, but not column-content stores", () => {
+    const ini = "[2DAList]\nTable0=t.2da\n[t.2da]\nAddRow0=a0\n[a0]\n2DAMEMORY1=RowIndex\nlabel=x\n2DAMEMORY2=label\nname=y\n2DAMEMORY3=RowIndex\n";
+    const row = parseChangesIni(ini).twoda[0]!.modifiers[0]!;
+    if (row.kind !== "addRow") throw new Error("expected addRow");
+    expect(row.stores.map((st) => [st.token, st.beforeCells])).toEqual([
+      [1, 0],
+      [2, undefined],
+      [3, undefined],
     ]);
   });
 

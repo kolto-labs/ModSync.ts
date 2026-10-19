@@ -896,25 +896,31 @@ export class TslPatcher {
     return match;
   }
 
-  private applyCells(table: TwoDA, index: number, cells: Map<string, PatcherValue>, filename: string, section: string): void {
-    for (const [column, v] of cells) {
-      if (!table.hasColumn(column)) throw new PatcherFileError(`[${section}] column "${column}" does not exist in ${filename}`);
-      table.setCell(index, column, this.resolveCell(v, table, column));
+  private applyStore(table: TwoDA, index: number, s: TwoDAStore, filename: string, section: string): void {
+    let value: string;
+    if (s.source.kind === "rowIndex") value = String(index);
+    else if (s.source.kind === "rowLabel") value = table.getRow(index)!.label;
+    else if (s.source.kind === "value") value = this.resolveValue(s.source.value);
+    else {
+      if (!table.hasColumn(s.source.column)) throw new PatcherFileError(`[${section}] cannot store column "${s.source.column}": not in ${filename}`);
+      value = table.getCell(index, s.source.column) ?? "";
     }
+    this.store(s.pool, s.token, value, section);
   }
 
-  private applyStores(table: TwoDA, index: number, stores: TwoDAStore[], filename: string, section: string): void {
-    for (const s of stores) {
-      let value: string;
-      if (s.source.kind === "rowIndex") value = String(index);
-      else if (s.source.kind === "rowLabel") value = table.getRow(index)!.label;
-      else if (s.source.kind === "value") value = this.resolveValue(s.source.value);
-      else {
-        if (!table.hasColumn(s.source.column)) throw new PatcherFileError(`[${section}] cannot store column "${s.source.column}": not in ${filename}`);
-        value = table.getCell(index, s.source.column) ?? "";
+  private applyCellsAndStores(table: TwoDA, index: number, cells: Map<string, PatcherValue>, stores: TwoDAStore[], filename: string, section: string): void {
+    let next = 0;
+    let cellPosition = 0;
+    for (const [column, v] of cells) {
+      while (next < stores.length && stores[next]!.beforeCells !== undefined && stores[next]!.beforeCells! <= cellPosition) {
+        this.applyStore(table, index, stores[next]!, filename, section);
+        next++;
       }
-      this.store(s.pool, s.token, value, section);
+      if (!table.hasColumn(column)) throw new PatcherFileError(`[${section}] column "${column}" does not exist in ${filename}`);
+      table.setCell(index, column, this.resolveCell(v, table, column));
+      cellPosition++;
     }
+    for (const s of stores.slice(next)) this.applyStore(table, index, s, filename, section);
   }
 
   private store(pool: "2damemory" | "strref", token: number, value: string, section: string): void {
@@ -943,14 +949,12 @@ export class TslPatcher {
           index = table.addRow(this.resolveRowLabel(m.rowLabel, table));
           this.logger.debug(`[${section}] ${filename}: added row ${index}`);
         }
-        this.applyCells(table, index, m.cells, filename, section);
-        this.applyStores(table, index, m.stores, filename, section);
+        this.applyCellsAndStores(table, index, m.cells, m.stores, filename, section);
         break;
       }
       case "changeRow": {
         const target = this.findTargetRow(table, m.target, filename, section);
-        this.applyCells(table, target.index, m.cells, filename, section);
-        this.applyStores(table, target.index, m.stores, filename, section);
+        this.applyCellsAndStores(table, target.index, m.cells, m.stores, filename, section);
         break;
       }
       case "copyRow": {
@@ -969,8 +973,7 @@ export class TslPatcher {
           }
         }
         if (index === undefined) index = table.copyRow(src.index, this.resolveRowLabel(m.newRowLabel, table));
-        this.applyCells(table, index, m.cells, filename, section);
-        this.applyStores(table, index, m.stores, filename, section);
+        this.applyCellsAndStores(table, index, m.cells, m.stores, filename, section);
         break;
       }
       case "addColumn": {
