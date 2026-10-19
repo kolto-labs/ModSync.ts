@@ -2,7 +2,7 @@ import { promises as fsp } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { Encapsulated, readEncapsulated, writeErf } from "../erf.js";
+import { Encapsulated, readEncapsulated, writeErf, writeRim } from "../erf.js";
 import { GffFieldType, type GffLocString, type GffStruct, addField, createGffRoot, createGffStruct, createLocString, getFieldByPath, readGff, writeGff } from "../gff.js";
 import { ResourceTypes } from "../restypes.js";
 import { createSsf, readSsf, writeSsf } from "../ssf.js";
@@ -537,6 +537,79 @@ describe("TslPatcher", () => {
     expect(message).toContain("2DAList table_missing.2da: table_missing.2da not found in");
     expect(message).toContain(path.join(gameDir, "Override", "table_missing.2da"));
     expect(message).toMatch(/BIF/);
+  });
+
+  describe("module .rim fallback", () => {
+    const GFF_INI = `[GFFList]\nFile0=gff_a.utc\n[gff_a.utc]\n!Destination=Modules\\mod_a.mod\nTag=patched`;
+
+    async function writeSiblingRim(name: string, resources: Record<string, [number, Uint8Array]>): Promise<void> {
+      const rim = new Encapsulated("RIM ");
+      for (const [resref, [type, data]] of Object.entries(resources)) rim.set(resref, type, data);
+      await fsp.writeFile(path.join(gameDir, "Modules", name), writeRim(rim));
+    }
+
+    it("real run patches a resource of an absent .mod from its _s.rim sibling and builds the .mod from the siblings", async () => {
+      await writeSiblingRim("mod_a.rim", { area_a: [ResourceTypes.are, smallGff("ARE", "area")] });
+      await writeSiblingRim("mod_a_s.rim", { gff_a: [ResourceTypes.utc, smallGff("UTC", "original")] });
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(parseChangesIni(GFF_INI));
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toEqual([]);
+      const mod = readEncapsulated(await fsp.readFile(path.join(gameDir, "Modules", "mod_a.mod")));
+      expect(mod.fileType).toBe("MOD ");
+      expect(getFieldByPath(readGff(mod.get("gff_a", ResourceTypes.utc)!.data), "Tag")?.value).toBe("patched");
+      expect(getFieldByPath(readGff(mod.get("area_a", ResourceTypes.are)!.data), "Tag")?.value).toBe("area");
+    });
+
+    it("matches sibling names case-insensitively", async () => {
+      await writeSiblingRim("MOD_A_S.RIM", { gff_a: [ResourceTypes.utc, smallGff("UTC", "original")] });
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs(), dryRun: true }).apply(parseChangesIni(GFF_INI));
+      expect(log.errors).toEqual([]);
+    });
+
+    it("real run still fails when neither the .mod nor any sibling exists", async () => {
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(parseChangesIni(GFF_INI));
+      expect(log.unverified).toEqual([]);
+      expect(log.errors.join("\n")).toMatch(/gff_a\.utc not found in .*mod_a\.mod nor in tslpatchdata/);
+    });
+
+    it("real-fs dry run still fails when the siblings are absent", async () => {
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs(), dryRun: true }).apply(parseChangesIni(GFF_INI));
+      expect(log.unverified).toEqual([]);
+      expect(log.errors.join("\n")).toMatch(/nor in tslpatchdata/);
+    });
+
+    it("virtual dry run reports unverified when the siblings are zero-byte placeholders", async () => {
+      await fsp.writeFile(path.join(gameDir, "Modules", "mod_a.rim"), new Uint8Array(0));
+      await fsp.writeFile(path.join(gameDir, "Modules", "mod_a_s.rim"), new Uint8Array(0));
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true }).apply(parseChangesIni(GFF_INI));
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toHaveLength(1);
+      expect(log.unverified[0]).toMatch(/gff_a\.utc.*mod_a\.mod.*zero-byte virtual placeholders \(mod_a\.rim, mod_a_s\.rim\)/);
+    });
+
+    it("virtual dry run reports unverified when the siblings are absent from the virtual game", async () => {
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true }).apply(parseChangesIni(GFF_INI));
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toHaveLength(1);
+      expect(log.unverified[0]).toMatch(/gff_a\.utc.*absent from the virtual game/);
+    });
+
+    it("virtual dry run still fails when readable siblings do not hold the resource", async () => {
+      await writeSiblingRim("mod_a.rim", { area_a: [ResourceTypes.are, smallGff("ARE", "area")] });
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true }).apply(parseChangesIni(GFF_INI));
+      expect(log.unverified).toEqual([]);
+      expect(log.errors.join("\n")).toMatch(/gff_a\.utc not found in .*mod_a\.mod nor in tslpatchdata/);
+    });
+
+    it("virtual dry run installing into an absent .mod with placeholder siblings reports the contents as unverified", async () => {
+      await fsp.writeFile(path.join(gameDir, "Modules", "mod_a.rim"), new Uint8Array(0));
+      const config = parseChangesIni(`[InstallList]\ninstall_folder0=Modules\\mod_a.mod\n[Modules\\mod_a.mod]\nFile0=new_item.uti`);
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true }).apply(config);
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toHaveLength(1);
+      expect(log.unverified[0]).toMatch(/mod_a\.mod does not exist.*mod_a\.rim/);
+      expect(log.warnings).toEqual([]);
+    });
   });
 
   it("throws PatcherConfigError for a malformed ini", () => {
