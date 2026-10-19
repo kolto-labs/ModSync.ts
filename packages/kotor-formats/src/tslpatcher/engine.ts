@@ -237,6 +237,10 @@ export class TslPatcher {
     this.log.unverified.push(msg);
     this.info(msg);
   }
+  private warnOnce(msg: string): void {
+    if (!this.log.warnings.includes(msg)) this.warn(msg);
+  }
+
   private warn(msg: string): void {
     this.log.warnings.push(msg);
     this.logger.warn(msg);
@@ -482,7 +486,7 @@ export class TslPatcher {
       const enc = (await this.loadArchive(abs, true))!;
       const { resref, type } = this.resourceKey(filename);
       enc.set(resref, type, data);
-      await this.writeAbs(abs, writeEncapsulated(enc));
+      await this.writeAbs(abs, writeEncapsulated(enc, { warn: (m) => this.warnOnce(m) }));
       this.info(`${this.dryRun ? "would write" : "wrote"} ${filename} into ${abs}`);
       return abs;
     }
