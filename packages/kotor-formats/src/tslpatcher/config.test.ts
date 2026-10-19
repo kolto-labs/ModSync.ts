@@ -80,6 +80,7 @@ File0=p_bastila.utc
 !Destination=Modules\\danm13.mod
 !ReplaceFile=1
 !Filename=p_b.utc
+!sourcefile=p_src.utc
 FirstName(strref)=StrRef3
 FirstName(lang0)=Bastila
 ClassList/0/Class=5
@@ -238,6 +239,7 @@ describe("parseChangesIni", () => {
     expect(g.destination).toBe("Modules/danm13.mod");
     expect(g.replaceFile).toBe(true);
     expect(g.saveAs).toBe("p_b.utc");
+    expect(g.sourceFile).toBe("p_src.utc");
     expect(g.modifiers[0]).toEqual({ kind: "modify", path: "FirstName", part: { kind: "strref" }, value: { kind: "strref", token: 3 } });
     expect(g.modifiers[1]).toEqual({ kind: "modify", path: "FirstName", part: { kind: "lang", id: 0 }, value: { kind: "constant", value: "Bastila" } });
     expect(g.modifiers[2]).toEqual({ kind: "modify", path: "ClassList/0/Class", value: { kind: "constant", value: "5" } });

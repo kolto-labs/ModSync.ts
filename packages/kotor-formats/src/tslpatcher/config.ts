@@ -103,7 +103,10 @@ export interface PatchFileCommon {
   destination: string;
   /** true: take the tslpatchdata copy over any existing game copy */
   replaceFile: boolean;
+  /** name of the resource inside the destination (also what is read as the existing target); default: the list name */
   saveAs?: string;
+  /** name of the file in tslpatchdata; default: the list name */
+  sourceFile?: string;
   sourceFolder?: string;
   overrideType: OverrideType;
 }
@@ -323,6 +326,8 @@ function readCommon(ini: IniDocument, filename: string, replaceFromKey: boolean,
   };
   const saveAs = section?.get("!SaveAs") ?? section?.get("!Filename");
   if (saveAs !== undefined && saveAs.trim() !== "") common.saveAs = saveAs.trim();
+  const sourceFile = section?.get("!SourceFile");
+  if (sourceFile !== undefined && sourceFile.trim() !== "") common.sourceFile = sourceFile.trim();
   const src = section?.get("!SourceFolder");
   if (src !== undefined && src.trim() !== "" && src.trim() !== ".") common.sourceFolder = src.trim().replace(/\\/g, "/");
   return section ? { common, section } : { common };

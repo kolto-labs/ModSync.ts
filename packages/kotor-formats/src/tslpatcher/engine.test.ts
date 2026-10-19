@@ -701,6 +701,74 @@ describe("TslPatcher", () => {
     });
   });
 
+  describe("!SaveAs / !SourceFile target resolution", () => {
+    const SECTION = "module_a_long_unique_section_name.utc";
+    const SAVEAS_INI = `[GFFList]\nFile0=${SECTION}\n[${SECTION}]\n!Destination=modules\\mod_a.mod\n!SaveAs=npc_a.utc\nTag=patched`;
+
+    async function writeSiblingRim(name: string, resources: Record<string, [number, Uint8Array]>): Promise<void> {
+      const rim = new Encapsulated("RIM ");
+      for (const [resref, [type, data]] of Object.entries(resources)) rim.set(resref, type, data);
+      await fsp.writeFile(path.join(gameDir, "Modules", name), writeRim(rim));
+    }
+
+    it("reads the existing target under !SaveAs from the module siblings and writes it back under that name", async () => {
+      await writeSiblingRim("mod_a.rim", { area_a: [ResourceTypes.are, smallGff("ARE", "area")] });
+      await writeSiblingRim("mod_a_s.rim", { npc_a: [ResourceTypes.utc, smallGff("UTC", "original")] });
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(parseChangesIni(SAVEAS_INI));
+      expect(log.errors).toEqual([]);
+      const mod = readEncapsulated(await fsp.readFile(path.join(gameDir, "Modules", "mod_a.mod")));
+      expect(getFieldByPath(readGff(mod.get("npc_a", ResourceTypes.utc)!.data), "Tag")?.value).toBe("patched");
+      expect(getFieldByPath(readGff(mod.get("area_a", ResourceTypes.are)!.data), "Tag")?.value).toBe("area");
+    });
+
+    it("reads the existing target under !SaveAs from an existing archive, not the list name", async () => {
+      const mod = new Encapsulated("MOD ");
+      mod.set("npc_a", ResourceTypes.utc, smallGff("UTC", "original"));
+      await fsp.writeFile(path.join(gameDir, "Modules", "mod_a.mod"), writeErf(mod));
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(parseChangesIni(SAVEAS_INI));
+      expect(log.errors).toEqual([]);
+      const out = readEncapsulated(await fsp.readFile(path.join(gameDir, "Modules", "mod_a.mod")));
+      expect(getFieldByPath(readGff(out.get("npc_a", ResourceTypes.utc)!.data), "Tag")?.value).toBe("patched");
+    });
+
+    it("reports the !SaveAs name (not the section name) when the target is nowhere to be found", async () => {
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(parseChangesIni(SAVEAS_INI));
+      expect(log.errors.join("\n")).toMatch(/npc_a\.utc not found in .*mod_a\.mod nor in tslpatchdata/);
+    });
+
+    it("dry run on a virtual game names the !SaveAs resource in the unverified note", async () => {
+      await fsp.writeFile(path.join(gameDir, "Modules", "mod_a.rim"), new Uint8Array(0));
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true }).apply(parseChangesIni(SAVEAS_INI));
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toHaveLength(1);
+      expect(log.unverified[0]).toMatch(/npc_a\.utc.*mod_a\.mod/);
+    });
+
+    it("falls back to the list name in the game when the !SaveAs name is absent", async () => {
+      await fsp.writeFile(path.join(gameDir, "Override", "legacy_a.utc"), smallGff("UTC", "original"));
+      const ini = `[GFFList]\nFile0=legacy_a.utc\n[legacy_a.utc]\n!SaveAs=legacy_b.utc\nTag=patched`;
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(parseChangesIni(ini));
+      expect(log.errors).toEqual([]);
+      expect(getFieldByPath(readGff(await fsp.readFile(path.join(gameDir, "Override", "legacy_b.utc"))), "Tag")?.value).toBe("patched");
+    });
+
+    it("reads the tslpatchdata copy under !SourceFile and saves under !SaveAs", async () => {
+      await fsp.writeFile(path.join(dataDir, "shipped_a.utc"), smallGff("UTC", "shipped"));
+      const ini = `[GFFList]\nFile0=${SECTION}\n[${SECTION}]\n!SourceFile=shipped_a.utc\n!SaveAs=npc_b.utc\nTag=patched\n!ReplaceFile=1`;
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(parseChangesIni(ini));
+      expect(log.errors).toEqual([]);
+      expect(getFieldByPath(readGff(await fsp.readFile(path.join(gameDir, "Override", "npc_b.utc"))), "Tag")?.value).toBe("patched");
+    });
+
+    it("uses !SourceFile for the tslpatchdata lookup when the game has no copy", async () => {
+      await fsp.writeFile(path.join(dataDir, "shipped_a.utc"), smallGff("UTC", "shipped"));
+      const ini = `[GFFList]\nFile0=${SECTION}\n[${SECTION}]\n!SourceFile=shipped_a.utc\n!SaveAs=npc_c.utc\nTag=patched`;
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(parseChangesIni(ini));
+      expect(log.errors).toEqual([]);
+      expect(getFieldByPath(readGff(await fsp.readFile(path.join(gameDir, "Override", "npc_c.utc"))), "Tag")?.value).toBe("patched");
+    });
+  });
+
   it("throws PatcherConfigError for a malformed ini", () => {
     expect(() => parseChangesIni("[GFFList]\nFile0=p_test.utc\n")).toThrow(PatcherConfigError);
     expect(() => parseChangesIni("[2DAList]\nTable0=spells.2da\n[spells.2da]\nAddRow0=nope\n")).toThrow(PatcherConfigError);

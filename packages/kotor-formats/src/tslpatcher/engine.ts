@@ -622,25 +622,39 @@ export class TslPatcher {
    */
   private async loadTarget(cfg: PatchFileCommon): Promise<{ data: Uint8Array; source: string; dest: Destination }> {
     const dest = this.parseDestination(cfg.destination);
+    const targetName = cfg.saveAs ?? cfg.filename;
+    const sourceName = cfg.sourceFile ?? cfg.filename;
     if (!cfg.replaceFile) {
-      const game = await this.readGameResource(dest, cfg.filename);
-      if (game) return { data: this.requireBytes(game, cfg.filename, `game ${dest.rel}`), source: `game ${dest.rel}`, dest };
+      const game = await this.readGameTarget(dest, targetName, cfg.filename);
+      if (game) return { data: this.requireBytes(game, targetName, `game ${dest.rel}`), source: `game ${dest.rel}`, dest };
     }
-    const src = await this.findSource(cfg.filename, cfg.sourceFolder);
-    if (src) return { data: this.requireBytes(await this.fs.readFile(src), cfg.filename, "tslpatchdata"), source: "tslpatchdata", dest };
+    const src = await this.findSource(sourceName, cfg.sourceFolder);
+    if (src) return { data: this.requireBytes(await this.fs.readFile(src), sourceName, "tslpatchdata"), source: "tslpatchdata", dest };
     if (cfg.replaceFile) {
-      const game = await this.readGameResource(dest, cfg.filename);
+      const game = await this.readGameTarget(dest, targetName, cfg.filename);
       if (game) {
-        this.warn(`${cfg.filename}: !ReplaceFile=1 but no copy in tslpatchdata; patching the game copy`);
-        return { data: this.requireBytes(game, cfg.filename, `game ${dest.rel}`), source: `game ${dest.rel}`, dest };
+        this.warn(`${targetName}: !ReplaceFile=1 but no copy in tslpatchdata; patching the game copy`);
+        return { data: this.requireBytes(game, targetName, `game ${dest.rel}`), source: `game ${dest.rel}`, dest };
       }
     }
-    const looked = (await this.gamePath(dest.isArchive ? dest.rel : `${dest.rel}/${cfg.filename}`)).path;
-    await this.noteUnverifiableModule(dest, cfg.filename);
-    if (dest.isArchive) throw new PatcherFileError(`${cfg.filename} not found in ${looked} nor in tslpatchdata (ship a copy in tslpatchdata)`);
-    const base = await this.readBaseGameResource(cfg.filename);
-    if (typeof base !== "string") return { data: this.requireBytes(base.data, cfg.filename, base.source), source: base.source, dest };
-    throw new PatcherFileError(`${cfg.filename} not found in ${looked} nor in tslpatchdata nor in the base game's chitin.key/BIF archives (${base}; ship a copy in tslpatchdata or place it in ${dest.rel})`);
+    const looked = (await this.gamePath(dest.isArchive ? dest.rel : `${dest.rel}/${targetName}`)).path;
+    await this.noteUnverifiableModule(dest, targetName);
+    const dataLabel = sourceName === targetName ? "tslpatchdata" : `tslpatchdata (${sourceName})`;
+    if (dest.isArchive) throw new PatcherFileError(`${targetName} not found in ${looked} nor in ${dataLabel} (ship a copy in tslpatchdata)`);
+    let base = await this.readBaseGameResource(targetName);
+    if (typeof base === "string" && cfg.filename !== targetName) {
+      const legacy = await this.readBaseGameResource(cfg.filename);
+      if (typeof legacy !== "string") base = legacy;
+    }
+    if (typeof base !== "string") return { data: this.requireBytes(base.data, targetName, base.source), source: base.source, dest };
+    throw new PatcherFileError(`${targetName} not found in ${looked} nor in ${dataLabel} nor in the base game's chitin.key/BIF archives (${base}; ship a copy in tslpatchdata or place it in ${dest.rel})`);
+  }
+
+  /** Read the existing target under its `!SaveAs` name, falling back to the list name when that differs. */
+  private async readGameTarget(dest: Destination, targetName: string, listName: string): Promise<Uint8Array | undefined> {
+    const found = await this.readGameResource(dest, targetName);
+    if (found || targetName === listName) return found;
+    return this.readGameResource(dest, listName);
   }
 
   /**
