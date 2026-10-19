@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { WineUnavailableError, createProcessHost, isWindowsExecutable, planLaunch, toWinePath, translateArgumentsForWine, type ProcessHost } from "./windowsExec.js";
+import { WineUnavailableError, createProcessHost, isWindowsBatchScript, isWindowsExecutable, planLaunch, resolveExecuteStdin, toWinePath, translateArgumentsForWine, type ProcessHost } from "./windowsExec.js";
 
 const MZ = new Uint8Array([0x4d, 0x5a, 0x90, 0x00]);
 const ELF = new Uint8Array([0x7f, 0x45, 0x4c, 0x46]);
@@ -107,5 +107,61 @@ describe("windows executable launch planning", () => {
     const host = stubHost({ present: {} });
     await expect(planLaunch(host, "/mods/fix.exe", [], [])).rejects.toBeInstanceOf(WineUnavailableError);
     await expect(planLaunch(host, "/mods/fix.exe", [], [])).rejects.toThrow(/wine/);
+  });
+
+  it("recognises .bat and .cmd scripts case-insensitively", () => {
+    expect(isWindowsBatchScript("/mods/run.bat")).toBe(true);
+    expect(isWindowsBatchScript("/mods/RUN.CMD")).toBe(true);
+    expect(isWindowsBatchScript("/mods/run.exe")).toBe(false);
+    expect(isWindowsBatchScript("/mods/run.sh")).toBe(false);
+  });
+
+  it("runs a .bat through wine cmd /c with a Z: path and translated arguments, without reading the file", async () => {
+    let looked = false;
+    const host = stubHost({ head: ELF, readHead: async () => { looked = true; return ELF; } });
+    const launch = await planLaunch(host, "/mods/pack/install.bat", ["/games/base/Override", "/q"], ["/games/base"]);
+    expect(launch).toMatchObject({
+      command: "/usr/bin/wine",
+      args: ["cmd", "/c", "Z:\\mods\\pack\\install.bat", "Z:\\games\\base\\Override", "/q"],
+      viaWine: true,
+    });
+    expect(launch.env?.WINEDEBUG).toBe("-all");
+    expect(looked).toBe(false);
+    const upper = await planLaunch(stubHost(), "/mods/pack/INSTALL.CMD", [], []);
+    expect(upper.args).toEqual(["cmd", "/c", "Z:\\mods\\pack\\INSTALL.CMD"]);
+  });
+
+  it("wraps a .bat in xvfb-run on a headless Linux host and reports missing wine", async () => {
+    const present = { wine: "/usr/bin/wine", "xvfb-run": "/usr/bin/xvfb-run" };
+    const launch = await planLaunch(stubHost({ env: { PATH: "/usr/bin" }, present }), "/mods/a.bat", [], []);
+    expect(launch.command).toBe("/usr/bin/xvfb-run");
+    expect(launch.args.slice(3)).toEqual(["/usr/bin/wine", "cmd", "/c", "Z:\\mods\\a.bat"]);
+    await expect(planLaunch(stubHost({ present: {} }), "/mods/a.bat", [], [])).rejects.toBeInstanceOf(WineUnavailableError);
+  });
+
+  it("leaves a .bat unchanged on Windows", async () => {
+    const host = stubHost({ platform: "win32" });
+    expect(await planLaunch(host, "C:\\mods\\run.bat", ["/q"], [])).toEqual({ command: "C:\\mods\\run.bat", args: ["/q"], viaWine: false });
+  });
+
+  it("keeps .exe launches unchanged when no stdin is requested", async () => {
+    const launch = await planLaunch(stubHost(), "/mods/fix.exe", ["/S"], []);
+    expect(launch.args).toEqual(["/mods/fix.exe", "/S"]);
+    expect("stdin" in launch).toBe(false);
+  });
+
+  it("passes stdin through on native, wine and batch launches", async () => {
+    expect((await planLaunch(stubHost({ head: ELF }), "/mods/tool", [], [], "y\n")).stdin).toBe("y\n");
+    expect((await planLaunch(stubHost(), "/mods/fix.exe", [], [], "y\n")).stdin).toBe("y\n");
+    expect((await planLaunch(stubHost(), "/mods/a.bat", [], [], "y\n")).stdin).toBe("y\n");
+    expect((await planLaunch(stubHost({ platform: "win32" }), "C:\\a.bat", [], [], "y\n")).stdin).toBe("y\n");
+  });
+
+  it("derives stdin only when the instruction opts in", () => {
+    expect(resolveExecuteStdin(undefined, ["a", "b"])).toEqual({ args: ["a", "b"] });
+    expect(resolveExecuteStdin({ other: 1 }, ["a"])).toEqual({ args: ["a"] });
+    expect(resolveExecuteStdin({ stdin: "1\n2\n" }, ["a"])).toEqual({ args: ["a"], stdin: "1\n2\n" });
+    expect(resolveExecuteStdin({ stdin: "arguments" }, ["1", "yes"])).toEqual({ args: [], stdin: "1\nyes\n" });
+    expect(resolveExecuteStdin({ stdin: "arguments" }, [])).toEqual({ args: [], stdin: "" });
   });
 });
