@@ -29,6 +29,7 @@ import {
 import { baseName, joinPath, normalizePath, parentPath, toNative } from "../fs/paths.js";
 import type { Logger, UserSettings } from "../model/types.js";
 import type { FileSystemPort } from "../ports/filesystem.js";
+import { nssCompilerHookFromEnv, resolveNssGame } from "./nssCompiler.js";
 
 export interface PatcherRequest {
   /** Absolute path of the mod's `tslpatchdata` folder. */
@@ -280,7 +281,10 @@ class NativePatcher implements PatcherPort {
       }
       const config = parseChangesIni(decodeIni(await fs.readFile(target.iniPath)));
       log.push(`applying ${baseName(target.iniPath)} from ${target.dataDir} to ${req.gameDir}${req.dryRun ? " (dry run)" : ""}`);
+      const compileScript = nssCompilerHookFromEnv(process.env, runProcess);
       const engine = new TslPatcher({
+        compileScript,
+        game: compileScript ? await resolveNssGame(process.env, req.gameDir, req.fs) : undefined,
         tslpatchdataDir: target.dataDir,
         gameDir: normalizePath(req.gameDir),
         fs,

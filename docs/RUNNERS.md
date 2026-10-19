@@ -53,6 +53,7 @@ They do not prove the original modbuilds were installed, binary widescreen chang
 external patcher/executable effects, resource compatibility or actual gameplay.
 Native source compilation is not bundled: supported precompiled scripts can be
 installed, while missing compilation inputs or unresolved substitutions fail.
+Setting `MODSYNC_NSS_COMPILER` (and optionally `MODSYNC_NSS_GAME`) enables an external compiler hook; see `docs/KOTOR_FORMATS.md`.
 
 The continuation also hardens installer/checkpoint failure handling, download
 concurrency, native TLK codecs, path containment, editor/wizard state and desktop

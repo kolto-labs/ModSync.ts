@@ -270,7 +270,22 @@ Value=2DAMEMORY0
 - Path elements matched case-sensitively; list children by 0-based integer.
 
 ### [CompileList]
-`File0=myscript.nss`, optional `[myscript.nss]` with `!Destination`, `!SaveAs`, `!ReplaceFile`, `!SourceFolder`. Placeholders `#2DAMEMORY1#` and `#StrRef1#` substituted, then compiled with `nwnnsscomp.exe`. The native TypeScript implementation uses a precompiled `.ncs` from tslpatchdata when present. Missing precompiled files and source placeholders that require recompilation produce an error, so incomplete script installation cannot report success. A native compiler is not bundled.
+`File0=myscript.nss`, optional `[myscript.nss]` with `!Destination`, `!SaveAs`, `!ReplaceFile`, `!SourceFolder`. Placeholders `#2DAMEMORY1#` and `#StrRef1#` substituted, then compiled with `nwnnsscomp.exe`. The native TypeScript implementation uses a precompiled `.ncs` from tslpatchdata when present. Missing precompiled files and source placeholders that require recompilation produce an error, so incomplete script installation cannot report success. A native compiler is not bundled, but `TslPatcherOptions.compileScript` accepts an optional external compiler hook (see below).
+
+##### External compiler hook
+
+When tslpatchdata has no precompiled `.ncs` for a script and `compileScript` is set, the engine substitutes the `#2DAMEMORY#`/`#StrRef#` placeholders in the `.nss`, encodes it as windows-1252 and passes it to the hook (`{ name, source, game, includeDirs, readGameResource }`); the returned `.ncs` bytes go through the normal write path (`!Destination`, `!SaveAs`, `!ReplaceFile`, backups). A shipped precompiled `.ncs` still wins, a dry run still records the script as unverified without calling the hook, and without a hook the behavior is unchanged. `game` comes from `TslPatcherOptions.game`, else 2 when `swkotor2.exe`/`swkotor2.ini` is in the game directory, else 1. `readGameResource(name)` reads a file from `Override`, then from the base game's `chitin.key`/BIF archives.
+
+`@modsync/core`'s native patcher builds the hook from the environment (`packages/core/src/engine/nssCompiler.ts`):
+
+| Variable | Meaning |
+| --- | --- |
+| `MODSYNC_NSS_COMPILER` | Path of a command line compiler. Unset or blank disables the hook. A path ending in `.exe` is launched through `wine` outside Windows. |
+| `MODSYNC_NSS_GAME` | `1`/`k1`/`kotor1` or `2`/`k2`/`kotor2`/`tsl`. Default: detected from the game directory (`swkotor2.exe` etc.); the engine falls back to 1 if undetectable. |
+
+The compiler is run in a fresh temp directory as `<compiler> -c <name>.nss -o <name>.ncs -g <1|2> -n nwscript.nss -i <tslpatchdata dir> -i <temp dir>` (the flags of `bionsscomp`, `-g`/`-n`/`-i`/`-o`/`-c`). The substituted source and the game's `nwscript.nss` are written to the temp dir first; `nwscript.nss` is read from `Override`, then the BIFs, and compilation fails if it is not found. `#include "<name>"` scripts are resolved recursively: a copy next to the mod (case-insensitive) is used as is, otherwise the script (e.g. `k_inc_*`) is extracted from `Override` or the BIFs into the temp dir. Includes found nowhere are left for the compiler to report. The compiler needs a physical `tslpatchdata` directory; a non-zero exit, a missing `.ncs` or an empty `.ncs` fails that `[CompileList]` entry with the compiler's output. The temp dir is always removed.
+
+Limitations: only `#include "<bare name>"` forms are staged (no path separators), and a script that already has a precompiled `.ncs` is never recompiled, so sources with placeholders next to a precompiled `.ncs` still fail as before.
 
 ### [HACKList]
 `File0=script.ncs`, `[script.ncs]`: `!Destination`, `!ReplaceFile`, `!SaveAs`, and `<byteOffset>=<value>` lines. Offset decimal (or 0x hex); value literal integer or `StrRef#`/`2DAMEMORY#`, written as unsigned 16-bit big-endian at that offset.

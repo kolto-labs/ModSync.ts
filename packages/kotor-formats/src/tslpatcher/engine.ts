@@ -47,7 +47,22 @@ import type {
   TwoDAStore,
 } from "./config.js";
 import { NullPatcherLogger, type PatcherFs, type PatcherLogger } from "./fs.js";
-import { PatcherMemory, PatcherTokenError, parseToken } from "./memory.js";
+import { PatcherMemory, PatcherTokenError, parseToken, substituteTokenPlaceholders } from "./memory.js";
+
+export interface CompileScriptRequest {
+  /** script file name as listed in `[CompileList]`, e.g. `a_script.nss` */
+  name: string;
+  /** script source with `#2DAMEMORY#`/`#StrRef#` placeholders already substituted, windows-1252 encoded */
+  source: Uint8Array;
+  game: 1 | 2;
+  /** physical directories to search for `#include`d scripts (the script's tslpatchdata folder) */
+  includeDirs: string[];
+  /** read a file from the game's override folder or, failing that, its chitin.key/BIF archives; undefined when absent */
+  readGameResource: (filename: string) => Promise<Uint8Array | undefined>;
+}
+
+/** Compile one script to `.ncs` bytes; throw to fail the `[CompileList]` entry. */
+export type CompileScriptHook = (req: CompileScriptRequest) => Promise<Uint8Array>;
 
 export interface TslPatcherOptions {
   /** absolute path of the mod's tslpatchdata folder */
@@ -60,6 +75,13 @@ export interface TslPatcherOptions {
   dryRun?: boolean;
   /** where to put backups; default `<tslpatchdata>/../backup/<timestamp>` */
   backupDir?: string;
+  /**
+   * Optional external script compiler used by `[CompileList]` when tslpatchdata
+   * has no precompiled `.ncs`. Never called in a dry run.
+   */
+  compileScript?: CompileScriptHook;
+  /** game passed to `compileScript`; default: 2 when swkotor2.exe/swkotor2.ini is in the game directory, else 1 */
+  game?: 1 | 2;
 }
 
 export interface PatcherLog {
@@ -155,6 +177,8 @@ export class TslPatcher {
   private readonly gameDir: string;
   private readonly backupRoot: string;
   private readonly backupIdentityBound: boolean;
+  private readonly compileScript: CompileScriptHook | undefined;
+  private readonly compileGame: 1 | 2 | undefined;
   private backupEnabled = true;
   private backupOutputsPlanned = false;
 
@@ -180,6 +204,8 @@ export class TslPatcher {
     this.tslpatchdataDir = path.resolve(opts.tslpatchdataDir);
     this.gameDir = path.resolve(opts.gameDir);
     this.backupIdentityBound = Boolean(opts.backupDir);
+    this.compileScript = opts.compileScript;
+    this.compileGame = opts.game;
     this.backupRoot = opts.backupDir ? path.resolve(opts.backupDir) : path.join(path.dirname(this.tslpatchdataDir), "backup", timestamp());
   }
 
@@ -1268,14 +1294,17 @@ export class TslPatcher {
     const ncsName = cfg.filename.replace(/\.nss$/i, "") + ".ncs";
     const src = await this.findSource(ncsName, cfg.sourceFolder);
     const source = await this.findSource(cfg.filename, cfg.sourceFolder);
+    let compiled: Uint8Array | undefined;
     if (!src) {
       if (this.dryRun && source) {
         this.unverified(`CompileList ${cfg.filename}: dry run: no script compiler is available and tslpatchdata has no precompiled ${ncsName}; compilation not verified, nothing would be written for this script`);
         return;
       }
-      throw new PatcherFileError(`script compilation unavailable: ${cfg.filename} requires a compiler or precompiled ${ncsName} in tslpatchdata`);
-    }
-    if (source) {
+      if (!this.compileScript || !source) {
+        throw new PatcherFileError(`script compilation unavailable: ${cfg.filename} requires a compiler or precompiled ${ncsName} in tslpatchdata`);
+      }
+      compiled = await this.compileSource(cfg, source);
+    } else if (source) {
       const script = await this.fs.readFile(source);
       if (script.byteLength === 0 && this.isVirtualDryRun()) {
         this.unverified(`CompileList ${cfg.filename}: dry run: ${cfg.filename} (tslpatchdata) is a zero-byte virtual placeholder; memory substitution check not verified`);
@@ -1283,7 +1312,7 @@ export class TslPatcher {
         throw new PatcherFileError(`${cfg.filename} contains memory substitutions requiring source compilation; cannot use precompiled ${ncsName}`);
       }
     }
-    this.warn(`CompileList: ${cfg.filename} installed from precompiled ${ncsName} (compiled from precompiled ncs, not from source)`);
+    if (!compiled) this.warn(`CompileList: ${cfg.filename} installed from precompiled ${ncsName} (compiled from precompiled ncs, not from source)`);
     const dest = this.parseDestination(cfg.destination);
     const name = cfg.saveAs ? cfg.saveAs.replace(/\.nss$/i, "") + ".ncs" : ncsName;
     if (!cfg.replaceFile && await this.gameResourceExists(dest, name)) {
@@ -1291,7 +1320,38 @@ export class TslPatcher {
       return;
     }
     await this.checkOverrideType(dest, name, cfg.overrideType);
-    await this.writeGameResource(dest, name, await this.fs.readFile(src));
+    await this.writeGameResource(dest, name, compiled ?? await this.fs.readFile(src!));
+  }
+
+  /** Compile `[CompileList]` source through the external `compileScript` hook. */
+  private async compileSource(cfg: CompileFileConfig, sourcePath: string): Promise<Uint8Array> {
+    const hook = this.compileScript!;
+    const text = substituteTokenPlaceholders(decodeCp1252(await this.fs.readFile(sourcePath)), this.mem);
+    const game = this.compileGame ?? ((await this.gamePath("swkotor2.exe")).exists || (await this.gamePath("swkotor2.ini")).exists ? 2 : 1);
+    let bytes: Uint8Array;
+    try {
+      bytes = await hook({
+        name: path.basename(cfg.filename),
+        source: encodeCp1252(text),
+        game,
+        includeDirs: [...new Set([path.dirname(sourcePath), this.tslpatchdataDir])],
+        readGameResource: async (filename) => {
+          try {
+            const found = await this.readGameResource({ rel: "override", isArchive: false }, filename);
+            if (found && found.byteLength > 0) return found;
+            const base = await this.readBaseGameResource(filename);
+            return typeof base === "string" || base.data.byteLength === 0 ? undefined : base.data;
+          } catch {
+            return undefined;
+          }
+        },
+      });
+    } catch (err) {
+      throw new PatcherFileError(`script compilation failed: ${cfg.filename}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    if (bytes.byteLength === 0) throw new PatcherFileError(`script compilation failed: ${cfg.filename}: the compiler produced an empty .ncs`);
+    this.info(`CompileList: ${cfg.filename} compiled from source for game ${game}`);
+    return bytes;
   }
 
   // ----------------------------------------------------------------------
