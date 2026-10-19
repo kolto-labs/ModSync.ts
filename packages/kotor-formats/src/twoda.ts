@@ -6,7 +6,7 @@
  * lookups are case-insensitive; the stored column labels keep their original
  * case.
  */
-import { BinaryReader, BinaryWriter, encodeCp1252 } from "./binary.js";
+import { BinaryReader, BinaryWriter, decodeCp1252, encodeCp1252 } from "./binary.js";
 
 export const TWODA_EMPTY = "****";
 const SIGNATURE = "2DA V2.b";
@@ -153,7 +153,20 @@ export class TwoDA {
   }
 }
 
+const TEXT_SIGNATURE = "2DA V2.0";
+
+/**
+ * Reads a 2DA table. Both the binary "2DA V2.b" layout and the text
+ * "2DA V2.0" layout are accepted.
+ *
+ * In the binary layout the `DataSize` field is advisory: some third-party
+ * tools write 0 for it. A table with at least one cell always has a data block
+ * of at least one byte, so `DataSize == 0` is treated as "unset" and the block
+ * is taken to extend to the end of the file. A non-zero value is still
+ * enforced.
+ */
 export function read2da(bytes: Uint8Array): TwoDA {
+  if (startsWithSignature(bytes, TEXT_SIGNATURE)) return readText2da(bytes);
   const r = new BinaryReader(bytes);
   const sig = r.string(SIGNATURE.length);
   if (sig !== SIGNATURE) throw new TwoDAError(`bad 2DA signature "${sig}"`);
@@ -176,17 +189,18 @@ export function read2da(bytes: Uint8Array): TwoDA {
   const cellCount = rowCount * columns.length;
   const offsets: number[] = [];
   for (let i = 0; i < cellCount; i++) offsets.push(r.u16());
-  const dataSize = r.u16();
+  const declaredSize = r.u16();
   const dataStart = r.position;
+  const dataSize = declaredSize === 0 && cellCount > 0 ? bytes.length - dataStart : declaredSize;
   if (dataStart + dataSize > bytes.length) throw new TwoDAError("2DA data block exceeds file size");
 
   const table = new TwoDA(columns);
   const cache = new Map<number, string>();
+  const block = bytes.subarray(dataStart, dataStart + dataSize);
   const cell = (off: number): string => {
     let s = cache.get(off);
     if (s === undefined) {
       if (off >= dataSize) throw new TwoDAError(`2DA cell offset ${off} is outside the data block (${dataSize} bytes)`);
-      const block = bytes.subarray(dataStart, dataStart + dataSize);
       if (block.indexOf(0, off) < 0) throw new TwoDAError(`unterminated 2DA cell at offset ${off}`);
       const sub = new BinaryReader(block, off);
       s = sub.cstring();
@@ -197,6 +211,59 @@ export function read2da(bytes: Uint8Array): TwoDA {
   for (let i = 0; i < rowCount; i++) {
     const row: TwoDARow = { label: rowLabels[i]!, cells: new Map() };
     for (let c = 0; c < columns.length; c++) row.cells.set(columns[c]!, cell(offsets[i * columns.length + c]!));
+    table.rows.push(row);
+  }
+  return table;
+}
+
+function startsWithSignature(bytes: Uint8Array, signature: string): boolean {
+  if (bytes.length < signature.length) return false;
+  for (let i = 0; i < signature.length; i++) if (bytes[i] !== signature.charCodeAt(i)) return false;
+  return true;
+}
+
+function splitTextTokens(line: string, lineNumber: number): string[] {
+  const tokens: string[] = [];
+  let i = 0;
+  while (i < line.length) {
+    const ch = line[i]!;
+    if (ch === " " || ch === "\t") {
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      const end = line.indexOf('"', i + 1);
+      if (end < 0) throw new TwoDAError(`unterminated quoted cell on 2DA line ${lineNumber}`);
+      tokens.push(line.slice(i + 1, end));
+      i = end + 1;
+      continue;
+    }
+    let end = i;
+    while (end < line.length && line[end] !== " " && line[end] !== "\t") end++;
+    tokens.push(line.slice(i, end));
+    i = end;
+  }
+  return tokens;
+}
+
+function readText2da(bytes: Uint8Array): TwoDA {
+  const lines = decodeCp1252(bytes).split(/\r\n|\n|\r/);
+  let next = 1;
+  const second = lines[next];
+  if (second !== undefined && (second.trim() === "" || /^\s*default\s*:/i.test(second))) next++;
+  while (next < lines.length && lines[next]!.trim() === "") next++;
+  if (next >= lines.length) throw new TwoDAError("text 2DA has no column header line");
+  const table = new TwoDA(splitTextTokens(lines[next]!, next + 1));
+  for (next++; next < lines.length; next++) {
+    const line = lines[next]!;
+    if (line.trim() === "") continue;
+    const tokens = splitTextTokens(line, next + 1);
+    const cells = tokens.slice(1);
+    if (cells.length > table.columns.length) {
+      throw new TwoDAError(`2DA line ${next + 1} has ${cells.length} cells for ${table.columns.length} columns`);
+    }
+    const row: TwoDARow = { label: tokens[0]!, cells: new Map() };
+    for (let c = 0; c < table.columns.length; c++) row.cells.set(table.columns[c]!, cells[c] ?? "");
     table.rows.push(row);
   }
   return table;
