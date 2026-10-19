@@ -101,6 +101,23 @@ export class RealFileSystem implements FileSystemPort {
     return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
   }
 
+  async readRange(path: string, offset: number, length: number): Promise<Uint8Array> {
+    const actual = (await this.resolveExisting(path)) ?? normalizePath(path);
+    const handle = await fsp.open(actual, "r");
+    try {
+      const buf = new Uint8Array(length);
+      let done = 0;
+      while (done < length) {
+        const { bytesRead } = await handle.read(buf, done, length - done, offset + done);
+        if (bytesRead === 0) break;
+        done += bytesRead;
+      }
+      return buf.subarray(0, done);
+    } finally {
+      await handle.close();
+    }
+  }
+
   async writeFile(path: string, data: Uint8Array): Promise<void> {
     const target = await this.resolveForWrite(path);
     await this.mkdirp(parentPath(target));

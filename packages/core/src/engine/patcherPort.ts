@@ -141,6 +141,16 @@ export function patcherFsFromPort(fs: FileSystemPort): PatcherFs {
     ...(fs.isSymbolicLink ? { isSymbolicLink: (p: string) => fs.isSymbolicLink!(p) } : {}),
     ...(fs.realpath ? { realpath: (p: string) => fs.realpath!(p) } : {}),
     readFile: (p) => fs.readFile(p),
+    ...(fs.readRange
+      ? {
+          readRange: (p: string, offset: number, length: number) => fs.readRange!(p, offset, length),
+          fileSize: async (p: string) => {
+            const st = await fs.stat(p);
+            if (!st) throw Object.assign(new Error(`ENOENT: no such file: ${p}`), { code: "ENOENT" });
+            return st.size;
+          },
+        }
+      : {}),
     writeFile: (p, data) => fs.writeFile(p, data),
     mkdirp: (p) => fs.mkdirp(p),
     readDir: async (p) => {

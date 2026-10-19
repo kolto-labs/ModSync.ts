@@ -358,6 +358,15 @@ export class TslPatcher {
     throw new PatcherFileError(`${filename}: ${origin} is empty (0 bytes)`);
   }
 
+  private parseSource<T>(parse: (data: Uint8Array) => T, data: Uint8Array, filename: string, source: string): T {
+    try {
+      return parse(data);
+    } catch (err) {
+      const origin = /^game .+\.bif$/i.test(source) ? `chitin.key/BIF ${source.slice(5)}` : source;
+      throw new PatcherFileError(`${filename}: cannot parse the copy from ${origin} (${data.byteLength} bytes): ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   private isVirtualDryRun(): boolean {
     return this.dryRun && this.fs.isVirtual === true;
   }
@@ -821,7 +830,7 @@ export class TslPatcher {
 
   private async process2da(cfg: TwoDAFileConfig): Promise<void> {
     const { data, source, dest } = await this.loadTarget(cfg);
-    const table = read2da(data);
+    const table = this.parseSource(read2da, data, cfg.filename, source);
     this.logger.debug(`2DAList: ${cfg.filename} loaded from ${source} (${table.height} rows)`);
     for (const m of cfg.modifiers) this.apply2daModifier(table, m, cfg.filename);
     await this.saveTarget(cfg, dest, write2da(table));
@@ -966,7 +975,7 @@ export class TslPatcher {
 
   private async processGff(cfg: GffFileConfig): Promise<void> {
     const { data, source, dest } = await this.loadTarget(cfg);
-    const root = readGff(data);
+    const root = this.parseSource(readGff, data, cfg.filename, source);
     this.logger.debug(`GFFList: ${cfg.filename} loaded from ${source}`);
     this.gffScope = root;
     try {

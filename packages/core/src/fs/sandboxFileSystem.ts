@@ -10,7 +10,10 @@ export class SandboxFileSystem implements FileSystemPort {
   constructor(readonly base: FileSystemPort, dirs: Directories) {
     const resolver = new PathResolver(dirs);
     this.roots = [resolver.modDirectory, resolver.kotorDirectory];
+    const baseRange = base.readRange?.bind(base);
+    if (baseRange) this.readRange = async (path, offset, length) => { await this.assertPath(path); return baseRange(path, offset, length); };
   }
+  readonly readRange?: (path: string, offset: number, length: number) => Promise<Uint8Array>;
   get isVirtual(): boolean { return this.base.isVirtual; }
 
   private async canonical(path: string): Promise<string> {
