@@ -45,6 +45,8 @@ export interface FileSystemPort {
   /** Recursive listing of files (not directories) under a root, absolute paths. */
   walk(path: string): Promise<string[]>;
   readFile(path: string): Promise<Uint8Array>;
+  /** Optional: read up to `length` bytes starting at `offset` without loading the whole file (absent on virtual ports). */
+  readRange?(path: string, offset: number, length: number): Promise<Uint8Array>;
   writeFile(path: string, data: Uint8Array): Promise<void>;
   mkdirp(path: string): Promise<void>;
   copyFile(src: string, dest: string): Promise<void>;

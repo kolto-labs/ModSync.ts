@@ -194,3 +194,27 @@ describe("base-game BIF fallback", () => {
     expect(corrupt.errors.join("\n")).toMatch(/cannot read .*chitin\.key: KEY too small/);
   });
 });
+
+describe("unparseable source diagnostics", () => {
+  const garbage = Uint8Array.from([1, 2, 3, 4, 5]);
+
+  it("names the Override copy and its byte length", async () => {
+    await fsp.writeFile(path.join(gameDir, "Override", "appearance.2da"), garbage);
+    const log = await run(new NodePatcherFs());
+    expect(log.errors.join("\n")).toMatch(/appearance\.2da: cannot parse the copy from game Override \(5 bytes\)/);
+  });
+
+  it("names the tslpatchdata copy", async () => {
+    await fsp.writeFile(path.join(dataDir, "appearance.2da"), garbage);
+    const log = await run(new NodePatcherFs());
+    expect(log.errors.join("\n")).toMatch(/cannot parse the copy from tslpatchdata \(5 bytes\)/);
+  });
+
+  it("names the BIF when the packed copy is unparseable", async () => {
+    await fsp.mkdir(path.join(gameDir, "data"), { recursive: true });
+    await fsp.writeFile(path.join(gameDir, "data", "2da.bif"), buildBif([{ type: ResourceTypes["2da"], data: garbage }]));
+    await fsp.writeFile(path.join(gameDir, "chitin.key"), buildKey("data\\2da.bif", [{ resref: "Appearance", type: ResourceTypes["2da"], index: 0 }]));
+    const log = await run(new NodePatcherFs());
+    expect(log.errors.join("\n")).toMatch(/cannot parse the copy from chitin\.key\/BIF data\/2da\.bif \(5 bytes\)/);
+  });
+});

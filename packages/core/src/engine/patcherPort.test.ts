@@ -4,7 +4,7 @@ import { RealFileSystem } from "../fs/realFileSystem.js";
 import { VirtualFileSystem } from "../fs/virtualFileSystem.js";
 import type { FileSystemPort } from "../ports/filesystem.js";
 import { NullLogger } from "../logging/logger.js";
-import { createPatcher, decodeIni, listNamespaces } from "./patcherPort.js";
+import { createPatcher, decodeIni, listNamespaces, patcherFsFromPort } from "./patcherPort.js";
 import { makeSandbox, writeText, type Sandbox } from "./testing.js";
 
 let sb: Sandbox;
@@ -263,5 +263,27 @@ describe("patcher port", () => {
     const fail = await holo.install({ tslpatchdataDir: `${sb.mods}/p/tslpatchdata`, gameDir: sb.kotor, dryRun: false });
     expect(fail.ok).toBe(false);
     expect(fail.errors[0]).toContain("code 2");
+  });
+});
+
+describe("patcherFsFromPort range reads", () => {
+  it("forwards readRange and fileSize when the port can read ranges", async () => {
+    const fs = new RealFileSystem();
+    await writeText(`${sb.mods}/big.bin`, "0123456789");
+    const adapted = patcherFsFromPort(fs);
+    expect(await adapted.fileSize!(`${sb.mods}/big.bin`)).toBe(10);
+    expect(new TextDecoder().decode(await adapted.readRange!(`${sb.mods}/big.bin`, 3, 4))).toBe("3456");
+    expect((await adapted.readRange!(`${sb.mods}/big.bin`, 8, 10)).length).toBe(2);
+  });
+
+  it("omits range reads for ports without them", () => {
+    const adapted = patcherFsFromPort(new VirtualFileSystem(new RealFileSystem()));
+    expect(adapted.readRange).toBeUndefined();
+    expect(adapted.fileSize).toBeUndefined();
+  });
+
+  it("reports a missing file as ENOENT from fileSize", async () => {
+    const adapted = patcherFsFromPort(new RealFileSystem());
+    await expect(adapted.fileSize!(`${sb.mods}/absent.bin`)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
