@@ -158,4 +158,32 @@ describe("Execute through wine", () => {
     expect(calls).toHaveLength(0);
     expect(lookups).toEqual([]);
   });
+
+  it("runs a .bat through wine cmd /c and only feeds stdin when the instruction opts in", async () => {
+    await writeText(`${sb.mods}/fixup/install.bat`, "@echo off\r\nset /p answer=Continue?\r\n");
+    const source = ["<<modDirectory>>/fixup/install.bat"];
+    const plain = harness();
+    expect((await executeInstruction(plain.ctx, instr("Execute", { source, arguments: "/q" }), mod(1))).code).toBe("Success");
+    expect(plain.calls[0].command).toBe("/usr/bin/wine");
+    expect(plain.calls[0].args.slice(0, 2)).toEqual(["cmd", "/c"]);
+    expect(plain.calls[0].args[2]).toMatch(/^Z:\\.*install\.bat$/);
+    expect(plain.calls[0].args[3]).toBe("/q");
+    expect(plain.calls[0].opts.stdin).toBeUndefined();
+
+    const answered = harness();
+    const withStdin = instr("Execute", { source, arguments: "1 yes" });
+    withStdin.metadata = { stdin: "arguments" };
+    expect((await executeInstruction(answered.ctx, withStdin, mod(1))).code).toBe("Success");
+    expect(answered.calls[0].args).toHaveLength(3);
+    expect(answered.calls[0].opts.stdin).toBe("1\nyes\n");
+  });
+
+  it("spawns a .bat directly on Windows", async () => {
+    await writeText(`${sb.mods}/fixup/install.bat`, "@echo off\r\n");
+    const { ctx, calls, lookups } = harness({ platform: "win32" });
+    await executeInstruction(ctx, instr("Execute", { source: ["<<modDirectory>>/fixup/install.bat"], arguments: "/q" }), mod(1));
+    expect(calls[0].command).toBe(toNative(`${sb.mods}/fixup/install.bat`));
+    expect(calls[0].args).toEqual(["/q"]);
+    expect(lookups).toEqual([]);
+  });
 });

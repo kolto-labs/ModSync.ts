@@ -260,15 +260,24 @@ export interface SpawnOutcome {
 export function runProcess(
   command: string,
   args: string[],
-  opts: { cwd?: string; env?: NodeJS.ProcessEnv; onLine?: (line: string) => void; signal?: AbortSignal },
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv; onLine?: (line: string) => void; signal?: AbortSignal; stdin?: string },
 ): Promise<SpawnOutcome> {
   return new Promise((resolve, reject) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(command, args, { cwd: opts.cwd, env: opts.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: false });
+      child = spawn(command, args, {
+        cwd: opts.cwd,
+        env: opts.env,
+        stdio: [opts.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+        windowsHide: false,
+      });
     } catch (err) {
       reject(err);
       return;
+    }
+    if (opts.stdin !== undefined && child.stdin) {
+      child.stdin.on("error", () => undefined);
+      child.stdin.end(opts.stdin);
     }
     let stdout = "";
     let stderr = "";

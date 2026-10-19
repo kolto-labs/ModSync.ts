@@ -4,13 +4,15 @@
  * executable's folder. A dry run only checks that the executable exists.
  * On a non-Windows host a Windows executable (MZ header) runs through wine,
  * with arguments into the game or mod directory rewritten to wine paths; see
- * `planLaunch`. Native programs are spawned unchanged.
+ * `planLaunch`; .bat/.cmd scripts run as `wine cmd /c <Z: path>`. Native
+ * programs are spawned unchanged. Stdin stays closed unless the instruction's
+ * `metadata.stdin` opts in (see `resolveExecuteStdin`).
  */
 
 import { parentPath, toNative } from "../../fs/paths.js";
 import type { Instruction, InstructionResult, ModComponent, ModOption } from "../../model/types.js";
 import type { InstallContext } from "../context.js";
-import { WineUnavailableError, planLaunch } from "../windowsExec.js";
+import { WineUnavailableError, planLaunch, resolveExecuteStdin } from "../windowsExec.js";
 import { ActionError, resolveSources, runAction } from "./common.js";
 
 /** Split a command line into arguments: whitespace separated, quotes group, backslash escapes. */
@@ -70,7 +72,7 @@ export async function executeExecute(
     if (!exe) throw new ActionError("FileNotFoundPre", `executable not found: "${instruction.source[0]}"`);
     const st = await ctx.fs.stat(exe);
     if (!st || st.isDirectory) throw new ActionError("FileNotFoundPre", `"${exe}" is not a file`);
-    const args = splitArguments(instruction.arguments);
+    const { args, stdin } = resolveExecuteStdin(instruction.metadata, splitArguments(instruction.arguments));
     ctx.logger.info(`execute: "${exe}" ${args.join(" ")}${ctx.dryRun ? " (dry run, not started)" : ""}`);
     if (ctx.dryRun) {
       run.note(`would run "${exe}" ${args.join(" ")}`.trim());
@@ -80,7 +82,7 @@ export async function executeExecute(
     const host = ctx.processHost;
     let launch;
     try {
-      launch = await planLaunch(host, toNative(exe), args, [ctx.dirs.kotorDirectory, ctx.dirs.modDirectory]);
+      launch = await planLaunch(host, toNative(exe), args, [ctx.dirs.kotorDirectory, ctx.dirs.modDirectory], stdin);
     } catch (err) {
       if (err instanceof WineUnavailableError) throw new ActionError("ExecuteError", `cannot run "${exe}": ${err.message}`);
       throw err;
@@ -91,6 +93,7 @@ export async function executeExecute(
       outcome = await host.run(launch.command, launch.args, {
         cwd: toNative(cwd),
         ...(launch.env ? { env: launch.env } : {}),
+        ...(launch.stdin !== undefined ? { stdin: launch.stdin } : {}),
         signal: ctx.signal,
         onLine: (line) => ctx.logger.info(`[${mod.name}] ${line}`),
       });

@@ -1,8 +1,9 @@
 /**
  * Launch planning for Execute: decide whether a program runs natively or
- * through `wine`. A Windows executable (MZ/PE header) on a non-Windows host
- * cannot be spawned directly, so it goes through wine; anything else (ELF,
- * scripts, every program on Windows) is spawned as before.
+ * through `wine`. A Windows executable (MZ/PE header) or a .bat/.cmd script on
+ * a non-Windows host cannot be spawned directly, so it goes through wine;
+ * anything else (ELF, shell scripts, every program on Windows) is spawned as
+ * before.
  *
  * Everything that touches the host (platform, environment, PATH lookup, the
  * file header, the spawn itself) lives on `ProcessHost` so tests can drive it
@@ -33,6 +34,8 @@ export interface Launch {
   args: string[];
   /** Only set when the launch needs a different environment than the parent's. */
   env?: NodeJS.ProcessEnv;
+  /** Text written to the program's stdin; when absent stdin is closed. */
+  stdin?: string;
   viaWine: boolean;
 }
 
@@ -122,29 +125,30 @@ export function translateArgumentsForWine(args: string[], roots: string[]): stri
   });
 }
 
-/**
- * Decide how to start `exe` (a native path). On Windows, and for anything
- * that is not a Windows executable, the launch is the plain program. Otherwise
- * it runs through wine, inside `xvfb-run` when the host has no display and
- * xvfb is installed. Throws `WineUnavailableError` when wine is needed but
- * missing.
- */
-export async function planLaunch(
-  host: ProcessHost,
-  exe: string,
-  args: string[],
-  roots: string[],
-): Promise<Launch> {
-  const native: Launch = { command: exe, args, viaWine: false };
-  if (host.platform === "win32") return native;
-  let head: Uint8Array;
-  try {
-    head = await host.readHead(exe, HEAD_BYTES);
-  } catch {
-    return native;
-  }
-  if (!isWindowsExecutable(head)) return native;
+const WINE_SCRIPT_EXTENSIONS = new Set([".bat", ".cmd"]);
 
+/** True for Windows batch scripts, which no non-Windows host can spawn directly. */
+export function isWindowsBatchScript(nativePath: string): boolean {
+  return WINE_SCRIPT_EXTENSIONS.has(path.extname(nativePath).toLowerCase());
+}
+
+/**
+ * Opt-in stdin for Execute. When the instruction's `metadata.stdin` is a string
+ * it is fed to the program verbatim (answers to prompts). When it is the
+ * literal `"arguments"` the parsed arguments are fed one per line and no longer
+ * passed on the command line. Without it nothing changes: stdin stays closed.
+ */
+export function resolveExecuteStdin(
+  metadata: Record<string, unknown> | undefined,
+  args: string[],
+): { args: string[]; stdin?: string } {
+  const marker = metadata?.stdin;
+  if (marker === "arguments") return { args: [], stdin: args.length > 0 ? `${args.join("\n")}\n` : "" };
+  if (typeof marker === "string") return { args, stdin: marker };
+  return { args };
+}
+
+async function wineLaunch(host: ProcessHost, what: string, wineArgs: string[]): Promise<Launch> {
   let wine: string | undefined;
   for (const name of WINE_BINARIES) {
     wine = await host.findExecutable(name);
@@ -152,11 +156,10 @@ export async function planLaunch(
   }
   if (!wine) {
     throw new WineUnavailableError(
-      `it is a Windows executable and this ${host.platform} host needs wine to run it, but neither ${WINE_BINARIES.map((n) => `"${n}"`).join(" nor ")} was found on PATH (install wine, and xvfb for headless hosts)`,
+      `it is ${what} and this ${host.platform} host needs wine to run it, but neither ${WINE_BINARIES.map((n) => `"${n}"`).join(" nor ")} was found on PATH (install wine, and xvfb for headless hosts)`,
     );
   }
 
-  const wineArgs = [exe, ...translateArgumentsForWine(args, roots)];
   const env: NodeJS.ProcessEnv = { ...host.env };
   if (env.WINEDEBUG === undefined) env.WINEDEBUG = "-all";
 
@@ -164,4 +167,38 @@ export async function planLaunch(
   const xvfb = headless ? await host.findExecutable("xvfb-run") : undefined;
   if (xvfb) return { command: xvfb, args: ["-a", "-s", XVFB_SCREEN, wine, ...wineArgs], env, viaWine: true };
   return { command: wine, args: wineArgs, env, viaWine: true };
+}
+
+/**
+ * Decide how to start `exe` (a native path). On Windows, and for anything
+ * that is neither a Windows executable nor a .bat/.cmd script, the launch is
+ * the plain program. Otherwise it runs through wine (`wine <exe>` or
+ * `wine cmd /c <Z: path>` for scripts), inside `xvfb-run` when the host has no
+ * display and xvfb is installed. Throws `WineUnavailableError` when wine is
+ * needed but missing. `stdin` is passed through untouched on the launch.
+ */
+export async function planLaunch(
+  host: ProcessHost,
+  exe: string,
+  args: string[],
+  roots: string[],
+  stdin?: string,
+): Promise<Launch> {
+  const withStdin = (launch: Launch): Launch => (stdin === undefined ? launch : { ...launch, stdin });
+  const native: Launch = { command: exe, args, viaWine: false };
+  if (host.platform === "win32") return withStdin(native);
+  if (isWindowsBatchScript(exe)) {
+    const script = exe.startsWith("/") ? toWinePath(exe) : exe;
+    return withStdin(
+      await wineLaunch(host, "a Windows batch script", ["cmd", "/c", script, ...translateArgumentsForWine(args, roots)]),
+    );
+  }
+  let head: Uint8Array;
+  try {
+    head = await host.readHead(exe, HEAD_BYTES);
+  } catch {
+    return withStdin(native);
+  }
+  if (!isWindowsExecutable(head)) return withStdin(native);
+  return withStdin(await wineLaunch(host, "a Windows executable", [exe, ...translateArgumentsForWine(args, roots)]));
 }
