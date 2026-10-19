@@ -150,6 +150,36 @@ describe.each(FLAVORS)("actions on %s file system", (flavor) => {
     expect(r.touched).toContain(`${sb.kotor}/Override/deep/y.txt`);
   });
 
+  it("Move of an archive's Override folder into <game>/Override merges instead of nesting", async () => {
+    await writeText(`${sb.mods}/m/Override/new.txt`, "new");
+    await writeText(`${sb.mods}/m/Override/deep/inner.txt`, "inner");
+    await writeText(`${sb.kotor}/Override/keep.txt`, "keep");
+    const ctx = makeCtx(flavor);
+    const r = await executeInstruction(ctx, instr("Move", { source: ["<<modDirectory>>/m/Override"], destination: "<<kotorDirectory>>/Override" }), mod(1));
+    expect(r.code).toBe("Success");
+    for (const rel of ["keep.txt", "new.txt", "deep/inner.txt"]) expect(await ctx.fs.exists(`${sb.kotor}/Override/${rel}`), rel).toBe(true);
+    expect(await ctx.fs.exists(`${sb.kotor}/Override/Override`)).toBe(false);
+    expect(await ctx.fs.exists(`${sb.mods}/m/Override`)).toBe(false);
+  });
+
+  it("Copy of a same-named folder in another casing creates the destination without nesting", async () => {
+    await writeText(`${sb.mods}/src/OVERRIDE/x.txt`, "x");
+    const ctx = makeCtx(flavor);
+    const r = await executeInstruction(ctx, instr("Copy", { source: ["<<modDirectory>>/src/OVERRIDE"], destination: "<<kotorDirectory>>/Override" }), mod(1));
+    expect(r.code).toBe("Success");
+    expect(await ctx.fs.exists(`${sb.kotor}/Override/x.txt`)).toBe(true);
+    expect((await ctx.fs.readDir(`${sb.kotor}/Override`)).map((e) => e.name)).toEqual(["x.txt"]);
+    expect(r.touched).toContain(`${sb.kotor}/Override/x.txt`);
+  });
+
+  it("Copy of a folder into a differently named destination still nests it", async () => {
+    await writeText(`${sb.mods}/src/Textures/x.txt`, "x");
+    const ctx = makeCtx(flavor);
+    const r = await executeInstruction(ctx, instr("Copy", { source: ["<<modDirectory>>/src/Textures"], destination: "<<kotorDirectory>>/Override" }), mod(1));
+    expect(r.code).toBe("Success");
+    expect(await ctx.fs.exists(`${sb.kotor}/Override/Textures/x.txt`)).toBe(true);
+  });
+
   it("Delete removes matches and warns for missing files", async () => {
     await writeText(`${sb.kotor}/Override/a.tpc`, "a");
     await writeText(`${sb.kotor}/Override/b.tpc`, "b");
