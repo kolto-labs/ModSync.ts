@@ -156,6 +156,10 @@ afterEach(async () => {
   await fsp.rm(tmp, { recursive: true, force: true });
 });
 
+class PlaceholderNodeFs extends NodePatcherFs {
+  readonly isVirtual = true;
+}
+
 describe("TslPatcher", () => {
   it("applies every list section to a synthetic game directory", async () => {
     const backupDir = path.join(modDir, "backup", "run1");
@@ -371,6 +375,63 @@ describe("TslPatcher", () => {
     expect(readSsf(await fsp.readFile(path.join(gameDir, "Override", "p_test.ssf"))).sounds[15]).toBe(42);
     const spells = read2da(await fsp.readFile(path.join(gameDir, "Override", "spells.2da")));
     expect(spells.getCell(0, "name")).toBe("100");
+  });
+
+  describe("zero-byte sources", () => {
+    const TABLE_INI = `[2DAList]\nTable0=table_a.2da\n[table_a.2da]\nChangeRow0=row_fix\n[row_fix]\nRowIndex=0\nlabel=changed`;
+
+    it("dry run over a virtual fs reports a zero-byte tslpatchdata 2DA as unverified instead of an error", async () => {
+      await fsp.writeFile(path.join(dataDir, "table_a.2da"), new Uint8Array(0));
+      const config = parseChangesIni(TABLE_INI);
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true }).apply(config);
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toHaveLength(1);
+      expect(log.unverified[0]).toMatch(/table_a\.2da.*zero-byte virtual placeholder/);
+      expect(log.filesWritten).toEqual([]);
+    });
+
+    it("dry run reports a zero-byte game copy of GFF, SSF and HACK targets as unverified", async () => {
+      await fsp.writeFile(path.join(gameDir, "Override", "gff_a.utc"), new Uint8Array(0));
+      await fsp.writeFile(path.join(gameDir, "Override", "ssf_a.ssf"), new Uint8Array(0));
+      await fsp.writeFile(path.join(gameDir, "Override", "hack_a.ncs"), new Uint8Array(0));
+      const config = parseChangesIni(
+        `[GFFList]\nFile0=gff_a.utc\n[gff_a.utc]\nTag=x\n[SSFList]\nFile0=ssf_a.ssf\n[ssf_a.ssf]\nBattlecry 1=1\n[HACKList]\nFile0=hack_a.ncs\n[hack_a.ncs]\n0=1`,
+      );
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs(), dryRun: true }).apply(config);
+      expect(log.errors).toEqual([]);
+      expect(log.unverified).toHaveLength(3);
+    });
+
+    it("dry run on a real fs still fails on a zero-byte 2DA", async () => {
+      await fsp.writeFile(path.join(dataDir, "table_a.2da"), new Uint8Array(0));
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs(), dryRun: true }).apply(parseChangesIni(TABLE_INI));
+      expect(log.unverified).toEqual([]);
+      expect(log.errors.join("\n")).toMatch(/2DAList table_a\.2da: table_a\.2da: tslpatchdata is empty \(0 bytes\)/);
+    });
+
+    it("real run fails hard on a zero-byte 2DA and names the file", async () => {
+      await fsp.writeFile(path.join(dataDir, "table_a.2da"), new Uint8Array(0));
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new PlaceholderNodeFs() }).apply(parseChangesIni(TABLE_INI));
+      expect(log.unverified).toEqual([]);
+      expect(log.errors.join("\n")).toMatch(/table_a\.2da.*is empty \(0 bytes\)/);
+      expect(log.errors.join("\n")).not.toMatch(/RangeError/);
+      expect(log.filesWritten).toEqual([]);
+    });
+
+    it("real run fails on a zero-byte game dialog.tlk", async () => {
+      await fsp.writeFile(path.join(gameDir, "dialog.tlk"), new Uint8Array(0));
+      const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(parseChangesIni(`[TLKList]\nStrRef0=0\n`));
+      expect(log.errors.join("\n")).toMatch(/TLKList: dialog\.tlk: .*dialog\.tlk is empty \(0 bytes\)/);
+    });
+  });
+
+  it("names the missing file, the looked-up game path and the BIF caveat when a 2DA is absent", async () => {
+    const config = parseChangesIni(`[2DAList]\nTable0=table_missing.2da\n[table_missing.2da]\nChangeRow0=row_fix\n[row_fix]\nRowIndex=0\nlabel=x`);
+    const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(config);
+    const message = log.errors.join("\n");
+    expect(message).toContain("2DAList table_missing.2da: table_missing.2da not found in");
+    expect(message).toContain(path.join(gameDir, "Override", "table_missing.2da"));
+    expect(message).toMatch(/BIF/);
   });
 
   it("throws PatcherConfigError for a malformed ini", () => {

@@ -65,6 +65,8 @@ export interface PatcherLog {
   errors: string[];
   warnings: string[];
   infos: string[];
+  /** dry-run only: files whose content could not be patched because the source is a zero-byte virtual placeholder */
+  unverified: string[];
   /** absolute paths written (or, in dry-run mode, that would have been written) */
   filesWritten: string[];
   /** absolute game paths copied into the backup folder */
@@ -94,6 +96,13 @@ class PatcherFileError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "PatcherFileError";
+  }
+}
+
+class VirtualPlaceholderNotice extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "VirtualPlaceholderNotice";
   }
 }
 
@@ -139,7 +148,7 @@ export class TslPatcher {
   private backupEnabled = true;
   private backupOutputsPlanned = false;
 
-  private log: PatcherLog = { errors: [], warnings: [], infos: [], filesWritten: [], filesBackedUp: [], mutationPlan: { mode: "applied", complete: false, mutations: [], unsupported: [] } };
+  private log: PatcherLog = { errors: [], warnings: [], infos: [], unverified: [], filesWritten: [], filesBackedUp: [], mutationPlan: { mode: "applied", complete: false, mutations: [], unsupported: [] } };
   private mem = new PatcherMemory();
   private readonly dirCache = new Map<string, string[]>();
   private readonly archives = new Map<string, Encapsulated>();
@@ -163,7 +172,7 @@ export class TslPatcher {
   }
 
   async apply(config: PatcherConfig): Promise<PatcherLog> {
-    this.log = { errors: [], warnings: [], infos: [], filesWritten: [], filesBackedUp: [], mutationPlan: { mode: this.dryRun ? "planned" : "applied", complete: false, mutations: [], unsupported: [] } };
+    this.log = { errors: [], warnings: [], infos: [], unverified: [], filesWritten: [], filesBackedUp: [], mutationPlan: { mode: this.dryRun ? "planned" : "applied", complete: false, mutations: [], unsupported: [] } };
     this.mem = new PatcherMemory();
     this.touched.clear();
     this.createdFiles = [];
@@ -208,6 +217,10 @@ export class TslPatcher {
     this.log.infos.push(msg);
     this.logger.info(msg);
   }
+  private unverified(msg: string): void {
+    this.log.unverified.push(msg);
+    this.info(msg);
+  }
   private warn(msg: string): void {
     this.log.warnings.push(msg);
     this.logger.warn(msg);
@@ -222,7 +235,8 @@ export class TslPatcher {
     try {
       await fn();
     } catch (err) {
-      if (err instanceof PatcherFileError || err instanceof PatcherTokenError) this.error(`${what}: ${err.message}`);
+      if (err instanceof VirtualPlaceholderNotice) this.unverified(`${what}: ${err.message}`);
+      else if (err instanceof PatcherFileError || err instanceof PatcherTokenError) this.error(`${what}: ${err.message}`);
       else if (err instanceof Error) this.error(`${what}: ${err.name}: ${err.message}`);
       else this.error(`${what}: ${String(err)}`);
     }
@@ -313,6 +327,19 @@ export class TslPatcher {
     }
     const rel = normRel(dest);
     return { rel, isArchive: isEncapsulatedPath(rel) };
+  }
+
+  /**
+   * Binary parsers cannot read an empty buffer. Dry runs over a virtual file
+   * system register archive members as zero-byte placeholders, so the content
+   * patch is reported as unverified; real runs fail on an empty source.
+   */
+  private requireBytes(data: Uint8Array, filename: string, origin: string): Uint8Array {
+    if (data.byteLength > 0) return data;
+    if (this.dryRun && this.fs.isVirtual === true) {
+      throw new VirtualPlaceholderNotice(`dry run: ${filename} (${origin}) is a zero-byte virtual placeholder; content patch not verified`);
+    }
+    throw new PatcherFileError(`${filename}: ${origin} is empty (0 bytes)`);
   }
 
   private async readAbs(abs: string): Promise<Uint8Array | undefined> {
@@ -489,18 +516,19 @@ export class TslPatcher {
     const dest = this.parseDestination(cfg.destination);
     if (!cfg.replaceFile) {
       const game = await this.readGameResource(dest, cfg.filename);
-      if (game) return { data: game, source: `game ${dest.rel}`, dest };
+      if (game) return { data: this.requireBytes(game, cfg.filename, `game ${dest.rel}`), source: `game ${dest.rel}`, dest };
     }
     const src = await this.findSource(cfg.filename, cfg.sourceFolder);
-    if (src) return { data: await this.fs.readFile(src), source: "tslpatchdata", dest };
+    if (src) return { data: this.requireBytes(await this.fs.readFile(src), cfg.filename, "tslpatchdata"), source: "tslpatchdata", dest };
     if (cfg.replaceFile) {
       const game = await this.readGameResource(dest, cfg.filename);
       if (game) {
         this.warn(`${cfg.filename}: !ReplaceFile=1 but no copy in tslpatchdata; patching the game copy`);
-        return { data: game, source: `game ${dest.rel}`, dest };
+        return { data: this.requireBytes(game, cfg.filename, `game ${dest.rel}`), source: `game ${dest.rel}`, dest };
       }
     }
-    throw new PatcherFileError(`${cfg.filename} not found in ${dest.rel} nor in tslpatchdata`);
+    const looked = (await this.gamePath(dest.isArchive ? dest.rel : `${dest.rel}/${cfg.filename}`)).path;
+    throw new PatcherFileError(`${cfg.filename} not found in ${looked} nor in tslpatchdata (resources packed in BIF archives are not read; ship a copy in tslpatchdata or place it in ${dest.rel})`);
   }
 
   private async saveTarget(cfg: PatchFileCommon, dest: Destination, data: Uint8Array): Promise<void> {
@@ -562,7 +590,7 @@ export class TslPatcher {
       this.error(`TLKList: ${target.path} not found`);
       return;
     }
-    const dialog = readTlk(data, { warn: (m) => this.warn(m) });
+    const dialog = readTlk(this.requireBytes(data, "dialog.tlk", target.path), { warn: (m) => this.warn(m) });
     const sources = new Map<string, Tlk>();
     const loadSource = async (name: string): Promise<Tlk> => {
       const key = name.toLowerCase();

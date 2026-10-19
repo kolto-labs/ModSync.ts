@@ -57,6 +57,8 @@ export interface PatcherResult {
   /** Absolute game paths written (or that would be written in a dry run). */
   filesWritten: string[];
   log: string[];
+  /** Dry run only: patch targets that were zero-byte virtual placeholders, so their content was not verified. */
+  unverified?: string[];
 }
 
 export interface PatcherPort {
@@ -134,6 +136,7 @@ async function describeMissingIni(fs: PatcherFs, iniPath: string, dataDir: strin
 /** Adapt a FileSystemPort to the minimal PatcherFs the native engine needs. */
 export function patcherFsFromPort(fs: FileSystemPort): PatcherFs {
   return {
+    isVirtual: fs.isVirtual,
     exists: (p) => fs.exists(p),
     ...(fs.isSymbolicLink ? { isSymbolicLink: (p: string) => fs.isSymbolicLink!(p) } : {}),
     ...(fs.realpath ? { realpath: (p: string) => fs.realpath!(p) } : {}),
@@ -286,6 +289,7 @@ class NativePatcher implements PatcherPort {
         warnings: [...result.warnings],
         filesWritten: result.filesWritten.map(normalizePath),
         log: log.lines,
+        unverified: [...result.unverified],
       };
     } catch (err) {
       return fail(log.lines, err instanceof Error ? err.message : String(err));

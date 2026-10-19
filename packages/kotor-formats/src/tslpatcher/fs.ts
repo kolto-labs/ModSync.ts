@@ -5,6 +5,8 @@
  * node:fs/promises.
  */
 export interface PatcherFs {
+  /** True for an in-memory overlay where extracted files are zero-byte placeholders. */
+  readonly isVirtual?: boolean;
   exists(p: string): Promise<boolean>;
   /** Resolve existing symbolic links. Native adapters must provide this for path containment. */
   realpath?(p: string): Promise<string>;

@@ -179,6 +179,9 @@ export async function executePatcher(
       onLog: (line) => ctx.logger.debug(`[${mod.name}] ${line}`),
     });
     for (const w of result.warnings) ctx.logger.warn(`[${mod.name}] ${w}`);
+    for (const note of result.unverified ?? []) {
+      ctx.notify?.({ code: "virtual-source-unverified", message: `${mod.name}: ${note}`, modGuid: mod.guid, instructionGuid: instruction.guid });
+    }
     run.touch(...result.filesWritten);
     if (!result.ok) throw new ActionError("PatcherError", result.errors.join("; ") || "patcher failed");
     run.note(`${ctx.dryRun ? "validated" : "applied"} ${located.tslpatchdataDir}${namespaceIndex !== undefined ? ` [namespace ${namespaceIndex}]` : ""}${iniName ? ` [${iniName}]` : ""} (${result.filesWritten.length} file(s))`);
