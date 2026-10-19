@@ -8,6 +8,8 @@ export class PatcherTokenError extends Error {
   constructor(
     message: string,
     readonly token: string,
+    /** the token is unassigned only because the step that would assign it could not be verified (virtual dry run) */
+    readonly unverified = false,
   ) {
     super(message);
     this.name = "PatcherTokenError";
@@ -19,6 +21,15 @@ export class PatcherMemory {
   readonly twoda = new Map<number, string>();
   /** 2DAMEMORY tokens that hold a GFF field path pointer (stored via `!FieldPath`), not a plain string. */
   private readonly fieldPaths = new Set<number>();
+  private readonly unverifiedStrRef = new Set<number>();
+  private readonly unverifiedTwoda = new Set<number>();
+
+  /** Record that a skipped, unverifiable step would have assigned this token, so a later read is not a hard error. */
+  markUnverified(pool: "2damemory" | "strref", token: number): void {
+    if (pool === "strref") {
+      if (!this.strref.has(token)) this.unverifiedStrRef.add(token);
+    } else if (!this.twoda.has(token)) this.unverifiedTwoda.add(token);
+  }
 
   setStrRef(token: number, value: number): void {
     this.strref.set(token, value);
@@ -45,12 +56,18 @@ export class PatcherMemory {
   }
   getStrRef(token: number): number {
     const v = this.strref.get(token);
-    if (v === undefined) throw new PatcherTokenError(`StrRef${token} was never assigned (no matching [TLKList] entry ran)`, `StrRef${token}`);
+    if (v === undefined) {
+      if (this.unverifiedStrRef.has(token)) throw new PatcherTokenError(`StrRef${token} is assigned by an earlier step that could not be verified in this dry run; content patch not verified`, `StrRef${token}`, true);
+      throw new PatcherTokenError(`StrRef${token} was never assigned (no matching [TLKList] entry ran)`, `StrRef${token}`);
+    }
     return v;
   }
   get2da(token: number): string {
     const v = this.twoda.get(token);
-    if (v === undefined) throw new PatcherTokenError(`2DAMEMORY${token} was never assigned`, `2DAMEMORY${token}`);
+    if (v === undefined) {
+      if (this.unverifiedTwoda.has(token)) throw new PatcherTokenError(`2DAMEMORY${token} is assigned by an earlier step that could not be verified in this dry run; content patch not verified`, `2DAMEMORY${token}`, true);
+      throw new PatcherTokenError(`2DAMEMORY${token} was never assigned`, `2DAMEMORY${token}`);
+    }
     return v;
   }
 }
