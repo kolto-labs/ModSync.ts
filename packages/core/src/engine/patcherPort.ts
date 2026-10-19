@@ -154,20 +154,54 @@ export function patcherFsFromPort(fs: FileSystemPort): PatcherFs {
   };
 }
 
-/** Resolve which ini and data folder a request points at. */
+async function findEntry(fs: PatcherFs, dir: string, name: string): Promise<string | undefined> {
+  const wanted = name.toLowerCase();
+  return (await fs.readDir(dir)).find((n) => n.toLowerCase() === wanted);
+}
+
+/**
+ * Descend `relativePath` (a namespace's `DataPath`, `/` or backslash separated)
+ * below `base`, matching each segment case-insensitively. Returns undefined
+ * when the path is empty, tries to leave `base` (`..`), or does not exist, in
+ * which case callers stay on `base` like the reference patchers do.
+ */
+async function descendDataPath(fs: PatcherFs, base: string, relativePath: string): Promise<string | undefined> {
+  const segments = relativePath.split(/[\\/]+/).filter((segment) => segment !== "" && segment !== ".");
+  if (segments.length === 0 || segments.includes("..")) return undefined;
+  let dir = base;
+  for (const segment of segments) {
+    const entry = await findEntry(fs, dir, segment);
+    if (!entry) return undefined;
+    dir = joinPath(dir, entry);
+  }
+  return dir;
+}
+
+/**
+ * Resolve which ini and data folder a request points at.
+ *
+ * A selected namespace's `DataPath` (or legacy `DataFolderName`) folder is
+ * searched first, then the `tslpatchdata` root. Ini precedence: an explicit
+ * `req.iniName` (typically guessed by a converter) wins when that file exists;
+ * a selected namespace's own `IniName` is used when it does not. When neither
+ * exists the namespace's `IniName` (else `req.iniName`, else `changes.ini`) is
+ * reported as the missing file.
+ */
 async function resolveTarget(
   req: PatcherRequest,
   fs: PatcherFs,
 ): Promise<{ dataDir: string; iniPath: string; namespace?: Namespace }> {
-  let dataDir = normalizePath(req.tslpatchdataDir);
-  let iniName = req.iniName ?? CHANGES_INI;
+  const rootDir = normalizePath(req.tslpatchdataDir);
+  let dataDir = rootDir;
   let namespace: Namespace | undefined;
   if (req.namespaceIndex !== undefined) {
     let nsText: string | undefined;
-    for (const dir of [dataDir, parentPath(dataDir)]) {
-      const entry = (await fs.readDir(dir)).find((n) => n.toLowerCase() === NAMESPACES_INI);
+    let nsDir = rootDir;
+    for (const dir of [rootDir, parentPath(rootDir)]) {
+      const entry = await findEntry(fs, dir, NAMESPACES_INI);
       if (entry) {
         nsText = decodeIni(await fs.readFile(joinPath(dir, entry)));
+        nsDir = dir;
         break;
       }
     }
@@ -185,15 +219,27 @@ async function resolveTarget(
       if (!namespace) {
         throw new Error(`namespace index ${req.namespaceIndex} is out of range (${namespaces.length} namespaces)`);
       }
-      iniName = req.iniName ?? namespace.iniName;
       if (namespace.dataFolderName) {
-        const sub = (await fs.readDir(dataDir)).find((n) => n.toLowerCase() === namespace!.dataFolderName!.toLowerCase());
-        if (sub) dataDir = joinPath(dataDir, sub);
+        for (const base of nsDir === rootDir ? [rootDir] : [rootDir, nsDir]) {
+          const sub = await descendDataPath(fs, base, namespace.dataFolderName);
+          if (sub) {
+            dataDir = sub;
+            break;
+          }
+        }
       }
     }
   }
-  const iniEntry = (await fs.readDir(dataDir)).find((n) => n.toLowerCase() === iniName.toLowerCase());
-  return { dataDir, iniPath: joinPath(dataDir, iniEntry ?? iniName), namespace };
+  const iniNames = namespace ? [req.iniName, namespace.iniName] : [req.iniName ?? CHANGES_INI];
+  const searchDirs = dataDir === rootDir ? [rootDir] : [dataDir, rootDir];
+  for (const iniName of iniNames) {
+    if (iniName === undefined) continue;
+    for (const dir of searchDirs) {
+      const entry = await findEntry(fs, dir, iniName);
+      if (entry) return { dataDir: dir, iniPath: joinPath(dir, entry), namespace };
+    }
+  }
+  return { dataDir, iniPath: joinPath(dataDir, namespace?.iniName ?? req.iniName ?? CHANGES_INI), namespace };
 }
 
 function makeLog(req: PatcherRequest, logger: Logger): { lines: string[]; push: (line: string) => void } {
