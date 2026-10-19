@@ -206,7 +206,7 @@ install_folder1=Modules
 File0=foo.uti          ; copy only if not present (warn and skip otherwise)
 Replace0=bar.utc       ; overwrite
 ```
-Folder values are paths relative to the game dir. If the destination is an archive path (`Modules\danm13.mod`, `.rim`, `.erf`, `.sav`) the file is inserted into that archive (Replace overwriting an existing entry). Optional per-file section `[foo.uti]`: `!SourceFolder`, `!SaveAs`/`!Filename`, `!Destination`, `!ReplaceFile`. `!OverrideType` (`ignore` default | `warn` | `rename`): what to do if a file being installed into a module also exists in Override; rename renames the Override copy to `.bak`.
+The files of `install_folder<N>` are listed in the section named by the key (`[install_folder<N>]`); the value is the destination. A section named after the value is accepted as a fallback. Folder values are paths relative to the game dir. If the destination is an archive path (`Modules\danm13.mod`, `.rim`, `.erf`, `.sav`) the file is inserted into that archive (Replace overwriting an existing entry). Optional per-file section `[foo.uti]`: `!SourceFolder`, `!SaveAs`/`!Filename`, `!Destination`, `!ReplaceFile`. `!OverrideType` (`ignore` default | `warn` | `rename`): what to do if a file being installed into a module also exists in Override; rename renames the Override copy to `.bak`.
 
 ### [2DAList]
 ```

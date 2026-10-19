@@ -157,6 +157,48 @@ describe("parseChangesIni", () => {
     expect(cfg.install[1]!.files[0]).toEqual({ filename: "c.dlg", replaceExisting: false, overrideType: "warn", saveAs: "d.dlg", sourceFolder: "extra" });
   });
 
+  describe("InstallList section lookup", () => {
+    const keyed = [
+      "[InstallList]",
+      "install_folder0=Override",
+      "install_folder1=Modules\\sample.mod",
+      "install_folder2=StreamVoice\\100\\SPEAKER",
+      "",
+      "[install_folder0]",
+      "File0=a.uti",
+      "Replace1=b.utc",
+      "",
+      "[install_folder1]",
+      "File0=c.dlg",
+      "",
+      "[install_folder2]",
+      "",
+    ].join("\r\n");
+
+    it("reads files from the [install_folderN] section and uses the value as destination", () => {
+      for (const text of [keyed, `\ufeff${keyed}`]) {
+        const { install } = parseChangesIni(text);
+        expect(install.map((f) => f.destination)).toEqual(["Override", "Modules/sample.mod", "StreamVoice/100/SPEAKER"]);
+        expect(install.map((f) => f.files.map((x) => x.filename))).toEqual([["a.uti", "b.utc"], ["c.dlg"], []]);
+        expect(install[0]!.files[1]!.replaceExisting).toBe(true);
+      }
+    });
+
+    it("matches the key section case-insensitively and prefers it over a value-named section", () => {
+      const { install } = parseChangesIni("[InstallList]\nInstall_Folder0=Override\n[INSTALL_FOLDER0]\nFile0=key.uti\n[Override]\nFile0=value.uti\n");
+      expect(install[0]!.files.map((x) => x.filename)).toEqual(["key.uti"]);
+    });
+
+    it("falls back to a section named after the value", () => {
+      const { install } = parseChangesIni("[InstallList]\ninstall_folder0=Override\n[Override]\nFile0=a.uti\n");
+      expect(install[0]!.files.map((x) => x.filename)).toEqual(["a.uti"]);
+    });
+
+    it("reports the missing [install_folderN] section", () => {
+      expect(() => parseChangesIni("[InstallList]\ninstall_folder3=Override\n")).toThrow(/\[install_folder3\].*does not exist/);
+    });
+  });
+
   it("parses 2DAList modifiers sorted by suffix", () => {
     const t = cfg.twoda[0]!;
     expect(t.filename).toBe("spells.2da");
