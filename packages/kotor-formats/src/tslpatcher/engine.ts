@@ -153,6 +153,7 @@ export class TslPatcher {
   private readonly dirCache = new Map<string, string[]>();
   private readonly archives = new Map<string, Encapsulated>();
   private readonly placeholderArchives = new Set<string>();
+  private readonly moduleSiblings = new Map<string, Encapsulated | "placeholder">();
   private readonly overlay = new Map<string, Uint8Array>();
   private readonly touched = new Set<string>();
   private createdFiles: string[] = [];
@@ -180,6 +181,7 @@ export class TslPatcher {
     this.backupOutputsPlanned = false;
     this.archives.clear();
     this.placeholderArchives.clear();
+    this.moduleSiblings.clear();
     this.overlay.clear();
     this.dirCache.clear();
     this.backupEnabled = config.settings.backupFiles;
@@ -368,10 +370,53 @@ export class TslPatcher {
     else if (createIfMissing) {
       const type = encapsulatedFileTypeFromPath(abs) ?? "ERF ";
       enc = new Encapsulated(type);
-      this.warn(`archive ${abs} does not exist; creating an empty ${type.trim()}`);
+      const siblings = type === "MOD " ? await this.loadModuleSiblings(abs) : { archives: [], placeholders: [] };
+      if (siblings.archives.length > 0 || siblings.placeholders.length > 0) {
+        for (const sibling of siblings.archives) for (const r of sibling.resources) if (!enc.has(r.resref, r.type)) enc.set(r.resref, r.type, r.data);
+        if (siblings.placeholders.length > 0) {
+          this.placeholderArchives.add(abs);
+          this.unverified(`dry run: ${path.basename(abs)} does not exist; the installer builds it from ${siblings.placeholders.join(", ")}, zero-byte virtual placeholders, so the module's existing contents are not verified`);
+        } else this.info(`${path.basename(abs)} does not exist; building it from ${siblings.archives.length} module archive(s) (.rim/_s.rim/_dlg.erf)`);
+      } else this.warn(`archive ${abs} does not exist; creating an empty ${type.trim()}`);
     } else return undefined;
     this.archives.set(abs, enc);
     return enc;
+  }
+
+  /**
+   * A module missing its `.mod` is stored as `<name>.rim` + `<name>_s.rim`
+   * (+ `<name>_dlg.erf` in K2); the installer builds the `.mod` from them.
+   * Zero-byte siblings of a virtual dry run are reported as placeholders.
+   */
+  private async loadModuleSiblings(modAbs: string): Promise<{ archives: Encapsulated[]; placeholders: string[] }> {
+    const result = { archives: [] as Encapsulated[], placeholders: [] as string[] };
+    const stem = /^(.*)\.mod$/i.exec(path.basename(modAbs))?.[1];
+    if (stem === undefined) return result;
+    for (const name of [`${stem}.rim`, `${stem}_s.rim`, `${stem}_dlg.erf`]) {
+      const sibling = await this.resolveCase(path.dirname(modAbs), name);
+      if (!sibling.exists) continue;
+      let cached = this.moduleSiblings.get(sibling.path);
+      if (cached === undefined) {
+        const data = await this.readAbs(sibling.path);
+        if (!data) continue;
+        cached = data.byteLength === 0 && this.isVirtualDryRun() ? "placeholder" : readEncapsulated(this.requireBytes(data, path.basename(sibling.path), "archive"));
+        this.moduleSiblings.set(sibling.path, cached);
+      }
+      if (cached === "placeholder") result.placeholders.push(path.basename(sibling.path));
+      else result.archives.push(cached);
+    }
+    return result;
+  }
+
+  /** In a virtual dry run, a resource of a not-yet-installed `.mod` whose `.rim` siblings are placeholders or absent cannot be checked. */
+  private async noteUnverifiableModule(dest: Destination, filename: string): Promise<void> {
+    if (!dest.isArchive || !this.isVirtualDryRun() || !/\.mod$/i.test(dest.rel)) return;
+    const mod = await this.gamePath(dest.rel);
+    if (mod.exists || this.archives.has(mod.path)) return;
+    const siblings = await this.loadModuleSiblings(mod.path);
+    if (siblings.archives.length > 0 && siblings.placeholders.length === 0) return;
+    const state = siblings.placeholders.length > 0 ? `zero-byte virtual placeholders (${siblings.placeholders.join(", ")})` : "absent from the virtual game";
+    throw new VirtualPlaceholderNotice(`dry run: ${filename} is in neither ${dest.rel} nor tslpatchdata; the installer builds ${dest.rel} from the module's .rim/_s.rim/_dlg.erf files, which are ${state}; content patch not verified`);
   }
 
   private resourceKey(filename: string): { resref: string; type: number } {
@@ -385,7 +430,15 @@ export class TslPatcher {
     if (dest.isArchive) {
       const abs = (await this.gamePath(dest.rel)).path;
       const enc = await this.loadArchive(abs, false);
-      if (!enc) return undefined;
+      if (!enc) {
+        const { resref, type } = splitResourceName(filename);
+        if (type === undefined) return undefined;
+        for (const sibling of (await this.loadModuleSiblings(abs)).archives) {
+          const found = sibling.get(resref, type)?.data;
+          if (found) return found;
+        }
+        return undefined;
+      }
       const { resref, type } = this.resourceKey(filename);
       const found = enc.get(resref, type)?.data;
       if (!found && !absentInPlaceholder && this.placeholderArchives.has(abs)) {
@@ -543,6 +596,7 @@ export class TslPatcher {
       }
     }
     const looked = (await this.gamePath(dest.isArchive ? dest.rel : `${dest.rel}/${cfg.filename}`)).path;
+    await this.noteUnverifiableModule(dest, cfg.filename);
     throw new PatcherFileError(`${cfg.filename} not found in ${looked} nor in tslpatchdata (resources packed in BIF archives are not read; ship a copy in tslpatchdata or place it in ${dest.rel})`);
   }
 
