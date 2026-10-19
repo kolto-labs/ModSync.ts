@@ -6,10 +6,72 @@
 import { baseName, normalizePath, parentPath } from "../../fs/paths.js";
 import type { Instruction, InstructionResult, ModComponent, ModOption, UserPrompt } from "../../model/types.js";
 import type { InstallContext } from "../context.js";
+import type { FileSystemPort } from "../../ports/filesystem.js";
 import { findChildCaseInsensitive, listNamespaces } from "../patcherPort.js";
 import { ActionError, promptId, resolveDestination, resolveSources, runAction } from "./common.js";
 
 export const TSLPATCHDATA = "tslpatchdata";
+
+/** Deepest level (1 = direct child) at which a nested `tslpatchdata` folder is accepted. */
+export const TSLPATCHDATA_MAX_DEPTH = 3;
+
+const TOP_LEVEL_LISTING_LIMIT = 25;
+
+function relativeTo(root: string, path: string): string {
+  const prefix = `${normalizePath(root).replace(/\/+$/, "")}/`;
+  const full = normalizePath(path);
+  return full.startsWith(prefix) ? full.slice(prefix.length) : full;
+}
+
+/**
+ * Find the `tslpatchdata` folder under an extracted mod directory,
+ * case-insensitively. A direct child wins; otherwise the shallowest match
+ * within TSLPATCHDATA_MAX_DEPTH levels is used (breadth-first). Several
+ * matches at the same depth are ambiguous and fail rather than guess.
+ */
+export async function findTslpatchdataDir(fs: FileSystemPort, root: string): Promise<string | undefined> {
+  let level = [normalizePath(root)];
+  for (let depth = 1; depth <= TSLPATCHDATA_MAX_DEPTH && level.length > 0; depth++) {
+    const hits: string[] = [];
+    const next: string[] = [];
+    for (const dir of level) {
+      let entries;
+      try {
+        entries = await fs.readDir(dir);
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (!entry.isDirectory) continue;
+        if (entry.name.toLowerCase() === TSLPATCHDATA) hits.push(entry.path);
+        else next.push(entry.path);
+      }
+    }
+    if (hits.length === 1) return hits[0];
+    if (hits.length > 1) {
+      const listed = hits.map((h) => `"${relativeTo(root, h)}"`).sort().join(", ");
+      throw new ActionError(
+        "PatcherError",
+        `ambiguous "${TSLPATCHDATA}" folders under "${normalizePath(root)}": ${hits.length} found at depth ${depth} (${listed}); point the source at one of them`,
+      );
+    }
+    level = next;
+  }
+  return undefined;
+}
+
+async function describeTopLevel(fs: FileSystemPort, match: string): Promise<string> {
+  const st = await fs.stat(match);
+  if (!st?.isDirectory) return `"${match}" (not a directory)`;
+  try {
+    const entries = (await fs.readDir(match)).map((e) => (e.isDirectory ? `${e.name}/` : e.name)).sort();
+    const shown = entries.slice(0, TOP_LEVEL_LISTING_LIMIT).join(", ");
+    const more = entries.length > TOP_LEVEL_LISTING_LIMIT ? `, … (+${entries.length - TOP_LEVEL_LISTING_LIMIT} more)` : "";
+    return `"${match}" (top-level entries: ${entries.length === 0 ? "none" : shown + more})`;
+  } catch {
+    return `"${match}" (unreadable)`;
+  }
+}
 
 /** Locate the tslpatchdata folder from a source match (exe, tslpatchdata dir, or mod dir). */
 export async function locateTslpatchdata(
@@ -29,10 +91,8 @@ export async function locateTslpatchdata(
     return dataStat?.isDirectory ? { tslpatchdataDir: dir!, ...(baseName(st.path).toLowerCase().endsWith(".exe") ? { executablePath: st.path } : {}) } : undefined;
   }
   if (baseName(st.path).toLowerCase() === TSLPATCHDATA) return { tslpatchdataDir: st.path };
-  const child = await findChildCaseInsensitive(ctx.fs, st.path, TSLPATCHDATA);
-  if (!child) return undefined;
-  const childStat = await ctx.fs.stat(child);
-  return childStat?.isDirectory ? { tslpatchdataDir: child } : undefined;
+  const found = await findTslpatchdataDir(ctx.fs, st.path);
+  return found ? { tslpatchdataDir: found } : undefined;
 }
 
 /** Interpret `arguments`: a number is a namespace index, anything else an ini name. */
@@ -61,7 +121,13 @@ export async function executePatcher(
       located = await locateTslpatchdata(ctx, m);
       if (located) break;
     }
-    if (!located) throw new ActionError("FileNotFoundPre", `no "${TSLPATCHDATA}" folder found under ${matches.map((m) => `"${m}"`).join(", ")}`);
+    if (!located) {
+      const searched = await Promise.all(matches.map((m) => describeTopLevel(ctx.fs, m)));
+      throw new ActionError(
+        "FileNotFoundPre",
+        `no "${TSLPATCHDATA}" folder found (searched up to ${TSLPATCHDATA_MAX_DEPTH} levels deep, case-insensitive) under ${searched.join(", ")}`,
+      );
+    }
 
     const gameDir = instruction.destination?.trim()
       ? await resolveDestination(ctx, instruction.destination)
