@@ -23,6 +23,24 @@ export class NodePatcherFs implements PatcherFs {
     const buf = await fsp.readFile(p);
     return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
   }
+  async readRange(p: string, offset: number, length: number): Promise<Uint8Array> {
+    const handle = await fsp.open(p, "r");
+    try {
+      const buf = new Uint8Array(length);
+      let done = 0;
+      while (done < length) {
+        const { bytesRead } = await handle.read(buf, done, length - done, offset + done);
+        if (bytesRead === 0) break;
+        done += bytesRead;
+      }
+      return buf.subarray(0, done);
+    } finally {
+      await handle.close();
+    }
+  }
+  async fileSize(p: string): Promise<number> {
+    return (await fsp.stat(p)).size;
+  }
   async writeFile(p: string, data: Uint8Array): Promise<void> {
     await fsp.mkdir(path.dirname(p), { recursive: true });
     await fsp.writeFile(p, data);
