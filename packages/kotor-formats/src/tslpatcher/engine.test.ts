@@ -331,6 +331,32 @@ describe("TslPatcher", () => {
     expect(log.filesWritten).toEqual([]);
   });
 
+  it("dry run records a source script without a compiler or precompiled binary as unverified", async () => {
+    await fsp.writeFile(path.join(dataDir, "uncompiled.nss"), "void main() { }");
+    const config = parseChangesIni(`[CompileList]\nFile0=uncompiled.nss`);
+    const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs(), dryRun: true }).apply(config);
+    expect(log.errors).toEqual([]);
+    expect(log.unverified).toHaveLength(1);
+    expect(log.unverified[0]).toMatch(/uncompiled\.nss.*compilation not verified/);
+    expect(log.infos.some((line) => /uncompiled\.nss/.test(line))).toBe(true);
+    expect(log.filesWritten).toEqual([]);
+  });
+
+  it("real run still fails on a source script without a compiler or precompiled binary", async () => {
+    await fsp.writeFile(path.join(dataDir, "uncompiled.nss"), "void main() { }");
+    const config = parseChangesIni(`[CompileList]\nFile0=uncompiled.nss`);
+    const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs() }).apply(config);
+    expect(log.errors.join("\n")).toMatch(/script compilation unavailable: uncompiled\.nss/);
+    expect(log.unverified).toEqual([]);
+    expect(log.filesWritten).toEqual([]);
+  });
+
+  it("dry run still errors when neither a script source nor a precompiled binary exists", async () => {
+    const config = parseChangesIni(`[CompileList]\nFile0=missing.nss`);
+    const log = await new TslPatcher({ tslpatchdataDir: dataDir, gameDir, fs: new NodePatcherFs(), dryRun: true }).apply(config);
+    expect(log.errors.join("\n")).toMatch(/requires a compiler or precompiled/);
+  });
+
   it("rejects a precompiled binary when source memory substitutions require compilation", async () => {
     await fsp.writeFile(path.join(dataDir, "present.nss"), "void main() { int ref = #StrRef0#; }");
     const config = parseChangesIni(`[CompileList]\nFile0=present.nss`);

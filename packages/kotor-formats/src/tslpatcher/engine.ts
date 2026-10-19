@@ -1006,10 +1006,14 @@ export class TslPatcher {
   private async processCompile(cfg: CompileFileConfig): Promise<void> {
     const ncsName = cfg.filename.replace(/\.nss$/i, "") + ".ncs";
     const src = await this.findSource(ncsName, cfg.sourceFolder);
+    const source = await this.findSource(cfg.filename, cfg.sourceFolder);
     if (!src) {
+      if (this.dryRun && source) {
+        this.unverified(`CompileList ${cfg.filename}: dry run: no script compiler is available and tslpatchdata has no precompiled ${ncsName}; compilation not verified, nothing would be written for this script`);
+        return;
+      }
       throw new PatcherFileError(`script compilation unavailable: ${cfg.filename} requires a compiler or precompiled ${ncsName} in tslpatchdata`);
     }
-    const source = await this.findSource(cfg.filename, cfg.sourceFolder);
     if (source) {
       const script = await this.fs.readFile(source);
       if (script.byteLength === 0 && this.isVirtualDryRun()) {
