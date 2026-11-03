@@ -13,6 +13,8 @@ const client = vi.hoisted(() => ({
   installStatus: vi.fn(async () => ({ running: false })),
   downloads: vi.fn(async () => []),
   answerPrompt: vi.fn(),
+  selectAll: vi.fn(async () => undefined),
+  getSelection: vi.fn(async () => ({ selectedGuids: [], order: [], issues: [] })),
 }));
 vi.mock("../api/client", () => ({ api: client }));
 
@@ -25,6 +27,20 @@ beforeEach(() => {
 });
 
 describe("installer state", () => {
+  it("uses the native Select All endpoint and refreshes the application's selection", async () => {
+    const { actions, setState, getState } = await import("./store");
+    setState({ file: { config: {}, mods: [] } as never });
+    const file = { config: {}, mods: [{ guid: "native-mod", isSelected: true }] };
+    const selection = { selectedGuids: ["native-mod"], order: [], issues: [{ code: "dependency-missing" }] };
+    client.getFile.mockResolvedValueOnce(file as never);
+    client.getSelection.mockResolvedValueOnce(selection as never);
+    await actions.selectAll();
+    expect(client.selectAll).toHaveBeenCalledTimes(1);
+    expect(client.getFile).toHaveBeenCalledTimes(1);
+    expect(client.getSelection).toHaveBeenCalledTimes(1);
+    expect(getState().file).toEqual(file);
+    expect(getState().selection).toEqual(selection);
+  });
   it("initializes a single connection and subscription under repeated mounting", async () => {
     const { actions } = await import("./store");
     await Promise.all([actions.init(), actions.init()]);

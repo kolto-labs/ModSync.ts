@@ -62,6 +62,9 @@ export function ModSelection({ phase }: ModSelectionProps) {
       <div className="selection-list">
         <div className="selection-toolbar">
           <input className="grow" placeholder="Search mods…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <button className="btn btn-sm" onClick={() => actions.selectAll()}>
+            Select All
+          </button>
           {phase === "base" && (
             <button className="btn btn-sm" title="Select every Essential mod" onClick={() => actions.selectDefaults("Essential")}>
               Select essentials

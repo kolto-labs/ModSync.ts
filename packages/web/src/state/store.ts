@@ -443,6 +443,17 @@ export const actions = {
     }
   },
 
+  async selectAll(): Promise<void> {
+    try {
+      await api.selectAll();
+      await actions.refreshFile();
+      await actions.refreshSelection();
+      setState({ report: null });
+    } catch (err) {
+      reportError(err, "Selecting all mods failed");
+    }
+  },
+
   async validate(): Promise<ValidationReport | null> {
     setState({ validating: true });
     try {

@@ -827,6 +827,9 @@ export function createMockClient(events: EventBus): ApiClient {
       const max = rank[tier ?? "Essential"] ?? 0;
       for (const m of allMods()) m.isSelected = rank[m.tier] <= max;
     },
+    selectAll: async () => {
+      for (const m of allMods()) m.isSelected = true;
+    },
     getSelection: async () => computeSelection(),
     getGraph: async () => graph(),
     validate: async (): Promise<ValidationReport> => {

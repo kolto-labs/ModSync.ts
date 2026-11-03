@@ -117,6 +117,7 @@ export interface ApiClient {
   mergeFile(content: string): Promise<MergeResult>;
   setModSelection(guid: Guid, selected: boolean, options?: Record<Guid, boolean>): Promise<void>;
   selectDefaults(tier?: Tier): Promise<void>;
+  selectAll(): Promise<void>;
   getSelection(): Promise<SelectionResult>;
   getGraph(): Promise<GraphResult>;
   validate(): Promise<ValidationReport>;
@@ -314,6 +315,7 @@ function createHttpClient(): ApiClient {
     setModSelection: (guid, selected, options) =>
       put(`/api/mods/${encodeURIComponent(guid)}/selection`, { selected, options }),
     selectDefaults: (tier) => post("/api/mods/select-defaults", tier ? { tier } : {}),
+    selectAll: () => post("/api/mods/select-all", {}),
     getSelection: () => get("/api/selection"),
     getGraph: () => get("/api/graph"),
     validate: () => post("/api/validate"),

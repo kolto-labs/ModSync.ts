@@ -49,6 +49,16 @@ export function registerModRoutes(app: FastifyInstance, state: AppState): void {
     return { changed, tier, ...state.recomputeSelection() };
   });
 
+  app.post("/api/mods/select-all", async () => {
+    const file = state.requireFile();
+    if (state.installRunning) throw new HttpError(409, "Cannot change the selection while an installation is running");
+    if (file.rustAuthoringGuide) throw new HttpError(409, "Apply authoring selections through /api/file/edit to preserve reviewed option decisions");
+    // Include Unknown tier; selecting a tier cutoff is not Select All. Preserve
+    // option choices and let the application's normal graph report conflicts.
+    const changed = selectByTier(file, [...TIERS]);
+    return { changed, ...state.recomputeSelection() };
+  });
+
   app.get("/api/selection", async () => state.recomputeSelection());
 
   app.get("/api/graph", async () => {
