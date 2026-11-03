@@ -139,6 +139,7 @@ function safeSha(value:unknown):asserts value is string {
  if(typeof value!=="string"||!/^[0-9a-f]{40}$/.test(value))throw new CheckpointError("Invalid canonical checkpoint digest");
 }
 function safeRelative(value:unknown):asserts value is string {
+ // eslint-disable-next-line no-control-regex -- Reject control characters in filesystem paths.
  if(typeof value!=="string"||!value||/[\\:\x00-\x1f\x7f]/.test(value)||value.split("/").some(part=>!part||part==="."||part===".."||/[. ]$/.test(part)||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(part)))throw new CheckpointError("Invalid canonical checkpoint relative path");
 }
 function rememberCasePath(path:string,spellings:Map<string,string>):void {
@@ -157,6 +158,7 @@ function canonicalRels(rels:readonly string[],spellings:Map<string,string>):stri
  return [...new Set(rels.map(rel=>canonicalCase(rel,spellings)))];
 }
 function safeAbsolute(value:unknown):asserts value is string {
+ // eslint-disable-next-line no-control-regex -- Reject control characters in filesystem paths.
  if(typeof value!=="string"||!isAbsolute(value)||/[\x00-\x1f\x7f]/.test(value)||toPosix(resolve(value))!==value)throw new CheckpointError("Invalid canonical checkpoint root/path");
 }
 /** No-follow static intake proof, not protection from concurrent hostile ancestor replacement. */

@@ -19,7 +19,7 @@ function exclusionPath(raw: string): string {
   if (text.startsWith("/")) throw new Error(`Absolute path is forbidden: ${raw}`);
   const parts = text.split("/").filter((p) => p !== "" && p !== ".");
   for (const part of parts) {
-    if (part === ".." || /[:\0<>|"*?\[\]]/.test(part) || /[ .]$/.test(part)) {
+    if (part === ".." || /[:\0<>|"*?[\]]/.test(part) || /[ .]$/.test(part)) {
       throw new Error(`Unsafe comparison exclusion: ${raw}`);
     }
     if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(part.split(".")[0]!)) {

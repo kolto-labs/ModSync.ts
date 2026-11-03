@@ -40,7 +40,8 @@ export function BrowseSource({ onInsert, onClose, inspectOnly = false, onDraft }
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [draftAction,setDraftAction]=useState("Copy");
   const [newFolderName,setNewFolderName]=useState("");
-  const validFolderName=newFolderName.trim()===newFolderName&&newFolderName.length>0&&!/[\\/\x00-\x1f*?\[\]]/.test(newFolderName)&&newFolderName!=="."&&newFolderName!=="..";
+  // eslint-disable-next-line no-control-regex -- Folder names must reject control characters.
+  const validFolderName=newFolderName.trim()===newFolderName&&newFolderName.length>0&&!/[\\/\x00-\x1f*?[\]]/.test(newFolderName)&&newFolderName!=="."&&newFolderName!=="..";
   const [origins,setOrigins]=useState<Record<string,string>>({});
   const staging=(name:string)=>/^\.tmp/i.test(name);
   const [loading, setLoading] = useState(false);
@@ -66,7 +67,7 @@ export function BrowseSource({ onInsert, onClose, inspectOnly = false, onDraft }
     const name=logicalName??archivePath.replace(/\\/g,'/').split('/').pop()??'',stem=name.replace(ARCHIVE_RE,'');
     return `${logicalName?'<<modDirectory>>':toPlaceholder(archivePath.replace(/\\/g,'/').replace(/\/[^/]*$/,''),dirs)}/${stem}`;
   };
-  useEffect(()=>{let disposed=false;setSavedArchives([]);const session=s.authoringSession;if(session)void api.authoringInputs(session.directory,session.head.cursor).then(result=>{if(!disposed&&result.revisionId===session.revisionId)setSavedArchives(result.inputs.filter(pin=>ARCHIVE_RE.test(pin.name)&&!/^\.tmp/i.test(pin.name)));}).catch(()=>{});return()=>{disposed=true;};},[s.authoringSession?.directory,s.authoringSession?.revisionId]);
+  useEffect(()=>{let disposed=false;setSavedArchives([]);const session=s.authoringSession;if(session)void api.authoringInputs(session.directory,session.head.cursor).then(result=>{if(!disposed&&result.revisionId===session.revisionId)setSavedArchives(result.inputs.filter(pin=>ARCHIVE_RE.test(pin.name)&&!/^\.tmp/i.test(pin.name)));}).catch(()=>{});return()=>{disposed=true;};},[s.authoringSession]);
   const openSavedArchive=async(name:string)=>{const session=s.authoringSession;if(!session)return;const current=++request.current;setLoading(true);setError(null);try{const result=await api.authoringArchive(session.directory,session.head.cursor,name);if(current!==request.current)return;if(result.revisionId!==session.revisionId)throw new Error('Saved revision changed; reopen the explorer');setArchive(result);setArchiveOutput(outputFor(result.path,result.logicalName));}catch(error){if(current===request.current)setError(error instanceof Error?error.message:String(error));}finally{if(current===request.current)setLoading(false);}};
   const openArchive = async (p: string) => {
     const current=++request.current;
@@ -86,6 +87,7 @@ export function BrowseSource({ onInsert, onClose, inspectOnly = false, onDraft }
 
   useEffect(() => {
     void browse(path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Invalidate the latest request sequence, not a captured earlier value.
     return()=>{request.current++;};
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -108,7 +108,7 @@ function apply(guide:RustAuthoringGuide,op:AuthoringEditOperation):void {
 /** Input is never mutated; publish only this returned guide after successful whole-guide validation. */
 export function applyAuthoringOperations(value:RustAuthoringGuide,operations:readonly AuthoringEditOperation[]):RustAuthoringGuide {
   const original=decodeRustAuthoringGuide(value);try{identities(original);}catch(e){throw new AuthoringEditError(null,'Input identities: '+(e as Error).message);}
-  let edited=structuredClone(original);
+  const edited=structuredClone(original);
   for(const [index,operation] of operations.entries()) {
     const before=structuredClone(edited);
     try {

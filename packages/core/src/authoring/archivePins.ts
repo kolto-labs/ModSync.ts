@@ -8,7 +8,7 @@ export interface ArchivePin { sha256: string; bytes: number }
 export const AUTHORING_INPUTS_KEY = "ModSyncAuthoringInputs";
 
 function checkedName(name: string): void {
-  if (!name || /[\\/:\0<>|"*?\[\]]/.test(name) || name === "." || name === ".." || /[ .]$/.test(name)) throw new Error("Archive input needs an ordinary filename");
+  if (!name || /[\\/:\0<>|"*?[\]]/.test(name) || name === "." || name === ".." || /[ .]$/.test(name)) throw new Error("Archive input needs an ordinary filename");
   if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(name.split(".")[0]!)) throw new Error("Reserved archive input filename");
   if (!/\.(zip|7z|rar|tar|gz|tgz|exe)$/i.test(name)) throw new Error("Unsupported archive input filename");
 }

@@ -252,7 +252,7 @@ export class Installer extends EventEmitter {
           summary.checkpointSessionId = session.id;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          throw new Error(`Checkpoint setup failed before installation: ${message}`);
+          throw new Error(`Checkpoint setup failed before installation: ${message}`, { cause: err });
         }
       }
 
@@ -392,7 +392,7 @@ export class Installer extends EventEmitter {
       try {
         await store.beforeTouch(session, predicted);
       } catch (err) {
-        throw new Error(`Checkpoint baseline failed before mutation: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`Checkpoint baseline failed before mutation: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
       }
       this.recoveryPending = true;
       checkpointOperationId=await store.beginMutation(session, instruction.guid, predicted);
@@ -416,7 +416,7 @@ export class Installer extends EventEmitter {
         this.recoveryPending = false;
         this.emitEvent({ type: "checkpoint-created", checkpointId: meta.id, isAnchor: meta.isAnchor, index: meta.index });
       } catch (err) {
-        throw new Error(`Checkpoint finalization failed; pending instruction ${instruction.guid} retained in session ${session.id}: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`Checkpoint finalization failed; pending instruction ${instruction.guid} retained in session ${session.id}: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
       }
     }
     ctx.telemetry?.record({

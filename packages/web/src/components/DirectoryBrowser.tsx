@@ -16,7 +16,8 @@ export interface DirectoryBrowserProps {
 
 /** Derive ancestors without rewriting POSIX backslashes or inventing relative roots. */
 function folderAncestors(path:string):Array<{label:string;path:string}> {
-  let rootEnd=0,windows=false;
+  let rootEnd:number;
+  let windows=false;
   if(/^[A-Za-z]:[\\/]/.test(path)){rootEnd=3;windows=true;}
   else if(path.startsWith('\\\\')){
     // Keep device/extended namespaces opaque; the server's parent route remains available.
@@ -87,6 +88,7 @@ export function DirectoryBrowser({ title, initialPath, pickFiles, extensions, on
     })();
     return () => {
       cancelled = true;
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- Invalidate the latest request sequence, not a captured earlier value.
       request.current++;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

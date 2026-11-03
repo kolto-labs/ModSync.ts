@@ -12,7 +12,7 @@ export async function directoryDestination(ctx:InstallContext,instruction:Instru
  const folded=target.toLowerCase();const matching=roots.filter(root=>folded.startsWith(root.toLowerCase().replace(/\/$/,"")+"/"));
  const root=matching.sort((a,b)=>b.length-a.length)[0];
  if(!root||roots.some(root=>root.toLowerCase()===folded))throw new ActionError("PathEscape","CreateDirectory requires a child of a configured root");
- if(/[*?\[\]\0]/.test(baseName(target)))throw new ActionError("PathEscape","CreateDirectory name cannot contain wildcard or NUL characters");
+ if(/[*?[\]\0]/.test(baseName(target)))throw new ActionError("PathEscape","CreateDirectory name cannot contain wildcard or NUL characters");
  // Reject physical symlinks all the way to the volume root, including the configured root itself.
  const parts=splitPath(root);let physical=parts.root;
  for(const segment of parts.segments){physical=joinPath(physical,segment);const stat=await ctx.fs.inspectPath(physical);if(!stat||!stat.isDirectory||stat.isSymbolicLink)throw new ActionError("PathEscape","Configured root ancestry must contain real directories");}
